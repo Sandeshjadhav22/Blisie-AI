@@ -10,7 +10,9 @@ import { parseCommand } from '../src/modules/conversations/responder.js';
 import { handleTelegramUpdate } from '../src/modules/telegram/telegram.adapter.js';
 import { callTelegram } from '../src/modules/telegram/telegram.client.js';
 import type * as TelegramClientModule from '../src/modules/telegram/telegram.client.js';
+import { setLlmProvider } from '../src/modules/agent/llm/index.js';
 import { useTestDatabase } from './helpers/db.js';
+import { EchoLlm } from './helpers/fake-llm.js';
 import { createSignedInUser } from './helpers/session.js';
 
 vi.mock('../src/modules/telegram/telegram.client.js', async (importOriginal) => ({
@@ -60,6 +62,8 @@ async function linkTelegram(cookie: string): Promise<string> {
 }
 
 beforeEach(() => {
+  // Plain messages go to the agent; an echoing fake LLM keeps these channel tests focused.
+  setLlmProvider(new EchoLlm());
   vi.mocked(callTelegram).mockReset();
   vi.mocked(callTelegram).mockImplementation((method) => {
     if (method === 'getMe') return Promise.resolve({ username: 'test_assistant_bot' } as never);
@@ -187,7 +191,7 @@ describe('Telegram messages', () => {
 
     await handleTelegramUpdate(textUpdate('/help'));
     await handleTelegramUpdate(textUpdate('/fly'));
-    expect(sentTexts()[0]).toMatch(/Here's what I can do/);
+    expect(sentTexts()[0]).toMatch(/Just ask me things in plain words/);
     expect(sentTexts()[1]).toBe("I don't know /fly yet. Try /help.");
   });
 

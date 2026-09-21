@@ -14,6 +14,8 @@ export interface IncomingMessage {
   text: string;
   /** The platform's ID for this message, used to drop duplicate deliveries. */
   externalId?: string;
+  /** Our stored message id, set by the message handler once the message is saved. */
+  messageId?: Types.ObjectId;
   metadata?: Record<string, unknown>;
 }
 
@@ -21,8 +23,11 @@ export interface IncomingMessage {
 export interface OutgoingMessage {
   text: string;
   /**
-   * `html` means `text` uses a small safe subset (<b>, <i>, <a href>, <code>) with everything else
-   * escaped. Adapters that can't render HTML should strip tags.
+   * `html`: a small safe subset (<b>, <i>, <a href>, <code>) with everything else escaped.
+   * `markdown`: light Markdown written by the agent (**bold**, *italic*, `code`, [link](url),
+   * "- " bullets). Adapters convert either to what their platform supports.
    */
-  format?: 'plain' | 'html';
+  format?: 'plain' | 'html' | 'markdown';
+  /** Stored with the message (e.g. which tools the agent used). Not shown to the user. */
+  metadata?: Record<string, unknown>;
 }

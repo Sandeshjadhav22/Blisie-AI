@@ -41,3 +41,16 @@ export const CALENDAR_SYNC_JOBS = {
   dispatch: 'dispatch',
   syncUser: 'sync-user',
 } as const;
+
+/** Job names on the reminders queue. Duplicated in the worker — change both together. */
+export const REMINDER_JOBS = {
+  /** Delayed until the reminder is due. */
+  send: 'send',
+  /** Scheduled safety net: re-queues overdue pending reminders (e.g. if Redis lost a job). */
+  sweep: 'sweep',
+} as const;
+
+/** BullMQ custom job ids can't contain ':'. */
+export function reminderJobId(reminderId: string): string {
+  return `reminder-${reminderId}`;
+}

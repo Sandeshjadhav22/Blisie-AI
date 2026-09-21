@@ -123,6 +123,23 @@ export function parseTimeOfDay(value: string): number {
   return Number(match[1]) * 60 + Number(match[2]);
 }
 
+/**
+ * Builds a stable, human date string from parts — independent of ICU punctuation differences.
+ * `long`: "Tuesday 22 September 2026, 9:00 AM"; `short`: "Tue 22 Sep, 9:00 AM".
+ */
+export function formatDateTime(date: Date, timeZone: string, style: 'long' | 'short'): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    weekday: style,
+    day: 'numeric',
+    month: style,
+    year: 'numeric',
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
+  const day = `${get('weekday')} ${get('day')} ${get('month')}`;
+  return `${style === 'long' ? `${day} ${get('year')}` : day}, ${formatTime(date, timeZone)}`;
+}
+
 /** Formats a time like "9:05 AM" in the user's timezone. */
 export function formatTime(date: Date, timeZone: string): string {
   return new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', minute: '2-digit' }).format(

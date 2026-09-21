@@ -24,7 +24,7 @@ export async function handleIncomingMessage(
     return null;
   }
 
-  const replies = await respond(message);
+  const replies = await respond({ ...message, messageId: stored._id });
 
   for (const reply of replies) {
     await recordMessage({
@@ -33,7 +33,10 @@ export async function handleIncomingMessage(
       channel: message.channel,
       role: 'assistant',
       text: reply.text,
-      metadata: reply.format === 'html' ? { format: 'html' } : undefined,
+      metadata:
+        reply.format || reply.metadata
+          ? { ...(reply.format ? { format: reply.format } : {}), ...reply.metadata }
+          : undefined,
     });
   }
   return replies;

@@ -7,7 +7,8 @@ import type { OutgoingMessage } from '../conversations/channel.types.js';
 import { getOrCreateConversation } from '../conversations/conversations.service.js';
 import { handleIncomingMessage } from '../conversations/message-handler.js';
 import { parseCommand } from '../conversations/responder.js';
-import { callTelegram } from './telegram.client.js';
+import { callTelegram, TelegramApiError } from './telegram.client.js';
+import { markdownToTelegramHtml } from './telegram.format.js';
 import { consumeLinkCode, type LinkResult } from './telegram.linking.js';
 
 /**
@@ -19,16 +20,29 @@ import { consumeLinkCode, type LinkResult } from './telegram.linking.js';
 const MAX_MESSAGE_LENGTH = 4096;
 
 export async function sendTelegramMessage(chatId: number, message: OutgoingMessage) {
+  const html = message.format === 'markdown' ? markdownToTelegramHtml(message.text) : message.text;
+  const isHtml = message.format === 'html' || message.format === 'markdown';
   const text =
-    message.text.length > MAX_MESSAGE_LENGTH
-      ? `${message.text.slice(0, MAX_MESSAGE_LENGTH - 1)}…`
-      : message.text;
-  await callTelegram('sendMessage', {
-    chat_id: chatId,
-    text,
-    ...(message.format === 'html' ? { parse_mode: 'HTML' } : {}),
-    link_preview_options: { is_disabled: true },
-  });
+    html.length > MAX_MESSAGE_LENGTH ? `${html.slice(0, MAX_MESSAGE_LENGTH - 1)}…` : html;
+  try {
+    await callTelegram('sendMessage', {
+      chat_id: chatId,
+      text,
+      ...(isHtml ? { parse_mode: 'HTML' } : {}),
+      link_preview_options: { is_disabled: true },
+    });
+  } catch (error) {
+    // Truncation or odd model output can leave HTML Telegram rejects; resend as plain text.
+    if (isHtml && error instanceof TelegramApiError && error.errorCode === 400) {
+      await callTelegram('sendMessage', {
+        chat_id: chatId,
+        text: message.text.slice(0, MAX_MESSAGE_LENGTH),
+        link_preview_options: { is_disabled: true },
+      });
+      return;
+    }
+    throw error;
+  }
 }
 
 function onboardingLink(): string {

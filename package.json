@@ -19,9 +19,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "redis:up": "docker compose up -d redis",
-    "redis:down": "docker compose down"
+    "redis:down": "docker compose down",
+    "eval": "tsx --env-file-if-exists=.env evals/run.ts"
   },
   "dependencies": {
+    "@google/genai": "^2.23.0",
     "@googleapis/calendar": "^20.0.0",
     "@googleapis/gmail": "^22.0.0",
     "@googleapis/tasks": "^17.0.0",

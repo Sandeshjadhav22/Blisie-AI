@@ -1,21 +1,23 @@
+import { UserModel } from '../../models/user.model.js';
+import { runAgent } from '../agent/orchestrator.js';
 import type { IncomingMessage, OutgoingMessage } from './channel.types.js';
 
 /**
- * Decides what to say back. Slash commands are handled here; everything else is echoed until the
- * agent takes over in Phase 6.
+ * Decides what to say back: slash commands are handled directly (fast, no LLM); everything else
+ * goes to the agent.
  */
 export type CommandHandler = (message: IncomingMessage, args: string) => Promise<OutgoingMessage[]>;
 
 const HELP_TEXT = [
-  "Hi! I'm your assistant. Here's what I can do so far:",
+  "Hi! I'm your assistant. Just ask me things in plain words, like:",
   '',
-  '/today — your meetings today',
-  '/free — free time tomorrow (or /free today, /free 2026-10-01)',
-  '/inbox — emails you received today',
-  '/tasks — your open Google Tasks',
-  '/help — show this message',
+  "- What's important today?",
+  '- What meetings do I have tomorrow?',
+  '- Did Rahul email me?',
+  '- Remind me to call Rahul at 6',
+  '- Remember that Rahul is our designer',
   '',
-  "Soon you'll be able to just ask me things, and I'll keep track of what you've promised people and send you a morning briefing.",
+  'Shortcuts: /today · /free · /inbox · /tasks · /help',
 ].join('\n');
 
 const commands = new Map<string, CommandHandler>([
@@ -42,5 +44,26 @@ export async function respond(message: IncomingMessage): Promise<OutgoingMessage
     if (handler) return handler(message, command.args);
     return [{ text: `I don't know /${command.name} yet. Try /help.` }];
   }
-  return [{ text: `You said: ${message.text}` }];
+  const user = await UserModel.findById(message.userId);
+  if (!user) return [];
+  const result = await runAgent({
+    user,
+    conversationId: message.conversationId,
+    text: message.text,
+    messageId: message.messageId,
+  });
+  return [
+    {
+      text: result.reply,
+      format: 'markdown',
+      metadata: {
+        agent: {
+          model: result.model,
+          steps: result.steps,
+          usage: result.usage,
+          toolCalls: result.toolCalls,
+        },
+      },
+    },
+  ];
 }

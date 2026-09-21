@@ -52,9 +52,10 @@ const envSchema = z.object({
   // `polling` for local dev (no public URL needed), `webhook` in production.
   TELEGRAM_MODE: z.enum(['webhook', 'polling', 'off']).optional(),
 
-  // Required from Phase 6 (Agent). The provider sits behind an interface so it can be swapped.
+  // The agent. The provider sits behind an interface (modules/agent/llm) so it can be swapped.
+  // Without an API key, plain messages get a "not configured" reply; slash commands still work.
   LLM_PROVIDER: z.enum(['gemini']).default('gemini'),
-  LLM_MODEL: z.string().optional(),
+  LLM_MODEL: z.string().default('gemini-3.8-flash'),
   LLM_API_KEY: z.string().optional(),
 });
 

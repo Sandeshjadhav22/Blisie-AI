@@ -60,6 +60,37 @@ responder handles slash commands and echoes everything else until the agent arri
 - Disconnecting Google deletes all synced email.
 - In Telegram, `/inbox` lists today's email (in the user's timezone).
 
+## The agent
+
+Plain messages go to the agent (`src/modules/agent`); slash commands skip it.
+
+```
+message → context (memories, connected services, last 16 turns)
+        → LLM ⇄ tool calls (validated with zod, executed by us, max 6 steps)
+        → reply (light Markdown, rendered to Telegram HTML by the adapter)
+```
+
+- **LLM interface** (`agent/llm/types.ts`) is provider-agnostic. `GeminiProvider` is the first
+  implementation. Model turns are replayed verbatim during tool calling, because Gemini's thought
+  signatures must be sent back unchanged. To swap models, add a provider.
+- **Tools** (`agent/tools/`): calendar events, free time, email search/read, tasks, reminders
+  (create/list/cancel) and memory (save/search/update/forget). Each declares a risk level. Only
+  READ and user-private WRITE tools are exposed until Phase 9 adds confirmations for actions
+  that affect other people.
+- **Times**: tools take the user's local wall-clock time (`YYYY-MM-DDTHH:mm`) and return
+  formatted local times, so the model never does timezone arithmetic.
+- **Safety**: tool arguments are validated before running. Failures go back to the model as
+  messages, not exceptions. Email/event text is treated as data, not instructions. Every
+  reply stores which tools ran, the model and token usage in the message's metadata.
+- **Reminders** are stored, then delivered by the worker on Telegram at the due time.
+
+### Evaluations
+
+`pnpm eval` runs the fixed conversations in `evals/cases.ts` against the real model (needs
+`LLM_API_KEY`) and checks which tools were called, with what arguments, and what the reply says.
+It uses an in-memory database and fake Google/queue calls. Run it after every prompt, tool or
+model change; `pnpm eval reminder` runs a subset.
+
 ## Calendar and Tasks
 
 - The **worker** keeps a rolling window of the primary calendar (1 day back, 30 days ahead,
@@ -89,13 +120,14 @@ responder handles slash commands and echoes everything else until the agent arri
 
 ## Scripts
 
-| Script                                         | What it does                                       |
-| ---------------------------------------------- | -------------------------------------------------- |
-| `pnpm dev`                                     | Run with `tsx watch`, loading `.env`               |
-| `pnpm build` / `pnpm start`                    | Compile to `dist/` and run it                      |
-| `pnpm typecheck` / `pnpm lint` / `pnpm format` | Quality checks                                     |
-| `pnpm test`                                    | Vitest; in-memory MongoDB (first run downloads it) |
-| `pnpm redis:up` / `pnpm redis:down`            | Start/stop local Redis                             |
+| Script                                         | What it does                                                    |
+| ---------------------------------------------- | --------------------------------------------------------------- |
+| `pnpm dev`                                     | Run with `tsx watch`, loading `.env`                            |
+| `pnpm build` / `pnpm start`                    | Compile to `dist/` and run it                                   |
+| `pnpm typecheck` / `pnpm lint` / `pnpm format` | Quality checks                                                  |
+| `pnpm eval`                                    | Agent evaluation set against the real LLM (needs `LLM_API_KEY`) |
+| `pnpm test`                                    | Vitest; in-memory MongoDB (first run downloads it)              |
+| `pnpm redis:up` / `pnpm redis:down`            | Start/stop local Redis                                          |
 
 ## Endpoints
 
@@ -131,6 +163,10 @@ responder handles slash commands and echoes everything else until the agent arri
 | `POST /calendar/sync`                                                             | ✓      | Queue a calendar sync now                                   |
 | `GET /tasks?includeCompleted=`                                                    | ✓      | Google Tasks (default list)                                 |
 | `POST /tasks`, `PATCH /tasks/:id`, `POST /tasks/:id/complete`                     | ✓      | Create, update, complete                                    |
+| `GET /reminders?status=pending\|all`                                              | ✓      | Reminders                                                   |
+| `POST /reminders`                                                                 | ✓      | Create (`text`, `dueAt` ISO) — delivered on Telegram        |
+| `DELETE /reminders/:id`                                                           | ✓      | Cancel a pending reminder                                   |
+| `GET /memories`, `POST /memories`, `PATCH /memories/:id`, `DELETE /memories/:id`  | ✓      | Remembered facts                                            |
 
 OAuth redirects report problems back to the frontend as `?error=<code>` (see `AuthErrorCode`).
 
