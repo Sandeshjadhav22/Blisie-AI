@@ -94,7 +94,7 @@ function isNotFound(error: unknown): boolean {
 
 /** Full message (with body), fetched live from Gmail. */
 export async function getEmail(userId: Types.ObjectId, gmailId: string) {
-  return withGoogleAuth(userId, async (auth) => {
+  return withGoogleAuth(userId, 'gmail', async (auth) => {
     try {
       const { data } = await gmail({ version: 'v1', auth }).users.messages.get({
         userId: 'me',
@@ -111,7 +111,7 @@ export async function getEmail(userId: Types.ObjectId, gmailId: string) {
 
 /** Whole conversation, oldest message first, fetched live from Gmail. */
 export async function getThread(userId: Types.ObjectId, threadId: string) {
-  return withGoogleAuth(userId, async (auth) => {
+  return withGoogleAuth(userId, 'gmail', async (auth) => {
     try {
       const { data } = await gmail({ version: 'v1', auth }).users.threads.get({
         userId: 'me',

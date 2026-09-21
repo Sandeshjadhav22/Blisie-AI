@@ -7,6 +7,7 @@ import { AppError } from '../../../utils/errors.js';
 import { summarizeError } from '../../../utils/error-summary.js';
 import { logger } from '../../../utils/logger.js';
 import { createOAuthClient } from './google-oauth.js';
+import { featuresFromScopes, type GoogleFeature } from './google.scopes.js';
 
 /**
  * Authorized Google API clients for a user. The access token is refreshed automatically when it
@@ -17,6 +18,25 @@ import { createOAuthClient } from './google-oauth.js';
 export class GoogleNotConnectedError extends AppError {
   constructor() {
     super(409, 'GOOGLE_NOT_CONNECTED', 'Connect Google in Settings first');
+  }
+}
+
+const FEATURE_LABELS: Record<GoogleFeature, string> = {
+  gmail: 'Gmail',
+  calendar: 'Google Calendar',
+  tasks: 'Google Tasks',
+};
+
+export class GoogleFeatureNotConnectedError extends AppError {
+  constructor(public readonly feature: GoogleFeature) {
+    super(
+      409,
+      'GOOGLE_FEATURE_NOT_CONNECTED',
+      `Connect ${FEATURE_LABELS[feature]} in Settings first`,
+      {
+        feature,
+      },
+    );
   }
 }
 
@@ -41,11 +61,19 @@ async function persistTokens(integrationId: Types.ObjectId, tokens: Credentials)
   }
 }
 
-export async function getGoogleAuthClient(userId: Types.ObjectId): Promise<OAuth2Client> {
+export async function getGoogleAuthClient(
+  userId: Types.ObjectId,
+  feature?: GoogleFeature,
+): Promise<OAuth2Client> {
   const integration = await IntegrationModel.findOne({ userId, provider: 'google' }).select(
     '+accessToken +refreshToken',
   );
-  if (!integration) throw new GoogleNotConnectedError();
+  if (!integration) {
+    throw feature ? new GoogleFeatureNotConnectedError(feature) : new GoogleNotConnectedError();
+  }
+  if (feature && !featuresFromScopes(integration.scopes)[feature]) {
+    throw new GoogleFeatureNotConnectedError(feature);
+  }
   if (!integration.refreshToken || integration.lastError === REAUTH_REQUIRED) {
     throw new GoogleReauthRequiredError();
   }
@@ -88,9 +116,10 @@ export async function markReauthRequired(userId: Types.ObjectId): Promise<void> 
  */
 export async function withGoogleAuth<T>(
   userId: Types.ObjectId,
+  feature: GoogleFeature,
   fn: (auth: OAuth2Client) => Promise<T>,
 ): Promise<T> {
-  const auth = await getGoogleAuthClient(userId);
+  const auth = await getGoogleAuthClient(userId, feature);
   try {
     return await fn(auth);
   } catch (error) {

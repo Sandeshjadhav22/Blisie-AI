@@ -1,5 +1,6 @@
 import type { Types } from 'mongoose';
 
+import { CalendarEventModel } from '../../models/calendar-event.model.js';
 import { EmailModel } from '../../models/email.model.js';
 import {
   type IntegrationDocument,
@@ -19,6 +20,7 @@ export interface PublicIntegration {
   features: Record<GoogleFeature, boolean>;
   needsReconnect: boolean;
   gmailLastSyncedAt: string | null;
+  calendarLastSyncedAt: string | null;
   connectedAt: string;
   updatedAt: string;
 }
@@ -32,6 +34,7 @@ export function toPublicIntegration(integration: IntegrationDocument): PublicInt
     features: featuresFromScopes(integration.scopes),
     needsReconnect: integration.lastError === REAUTH_REQUIRED,
     gmailLastSyncedAt: integration.gmailSync?.lastSyncedAt?.toISOString() ?? null,
+    calendarLastSyncedAt: integration.calendarSync?.lastSyncedAt?.toISOString() ?? null,
     connectedAt: integration.createdAt.toISOString(),
     updatedAt: integration.updatedAt.toISOString(),
   };
@@ -100,6 +103,10 @@ export async function disconnectGoogle(userId: Types.ObjectId): Promise<boolean>
   }
 
   // Nothing synced from Google outlives the connection.
-  await Promise.all([integration.deleteOne(), EmailModel.deleteMany({ userId })]);
+  await Promise.all([
+    integration.deleteOne(),
+    EmailModel.deleteMany({ userId }),
+    CalendarEventModel.deleteMany({ userId }),
+  ]);
   return true;
 }

@@ -17,6 +17,7 @@ import { decrypt } from '../src/utils/crypto.js';
 import { useTestDatabase } from './helpers/db.js';
 
 vi.mock('../src/jobs/email-sync.js', () => ({ enqueueEmailSync: vi.fn() }));
+vi.mock('../src/jobs/calendar-sync.js', () => ({ enqueueCalendarSync: vi.fn() }));
 vi.mock('../src/modules/integrations/google/google-oauth.js', async (importOriginal) => ({
   ...(await importOriginal<typeof GoogleOAuthModule>()),
   exchangeCodeForTokens: vi.fn(),
@@ -265,9 +266,29 @@ describe('PATCH /users/me', () => {
     });
   });
 
+  it('updates working hours and rejects inverted ones', async () => {
+    const agent = request.agent(app);
+    await signIn(agent);
+
+    const ok = await agent
+      .patch('/api/v1/users/me')
+      .send({ preferences: { workingHoursStart: '08:30', workingHoursEnd: '17:00' } });
+    expect(ok.body.user.preferences).toMatchObject({
+      workingHoursStart: '08:30',
+      workingHoursEnd: '17:00',
+    });
+
+    // Only the start changes, but it would now be after the saved end.
+    const inverted = await agent
+      .patch('/api/v1/users/me')
+      .send({ preferences: { workingHoursStart: '18:00' } });
+    expect(inverted.status).toBe(422);
+  });
+
   it.each([
     [{ timezone: 'Mars/Olympus' }],
     [{ preferences: { dailyBriefingTime: '25:00' } }],
+    [{ preferences: { workingHoursStart: '18:00', workingHoursEnd: '09:00' } }],
     [{ name: '' }],
     [{ email: 'hijack@example.com' }],
   ])('rejects %j', async (body) => {

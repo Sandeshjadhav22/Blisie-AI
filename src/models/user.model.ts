@@ -5,6 +5,9 @@ const preferencesSchema = new Schema(
     dailyBriefingEnabled: { type: Boolean, default: true },
     // Local time in the user's timezone, HH:mm.
     dailyBriefingTime: { type: String, default: '08:00' },
+    // Used when finding free time for meetings. Local HH:mm.
+    workingHoursStart: { type: String, default: '09:00' },
+    workingHoursEnd: { type: String, default: '18:00' },
   },
   { _id: false },
 );

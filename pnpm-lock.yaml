@@ -8,9 +8,15 @@ importers:
 
   .:
     dependencies:
+      '@googleapis/calendar':
+        specifier: ^20.0.0
+        version: 20.0.0
       '@googleapis/gmail':
         specifier: ^22.0.0
         version: 22.0.0
+      '@googleapis/tasks':
+        specifier: ^17.0.0
+        version: 17.0.0
       bullmq:
         specifier: ^6.3.8
         version: 6.3.8(ioredis@5.11.1)
@@ -308,8 +314,16 @@ packages:
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
+  '@googleapis/calendar@20.0.0':
+    resolution: {integrity: sha512-IPrgcKWT4oaKLi8esda9aReF62pKQSV1UkgOi0e0A7/oU30Uj4eQuA1tpJiNxTZ0gJlLo/sLAOhscDOiEf7uOA==}
+    engines: {node: '>=22.0.0'}
+
   '@googleapis/gmail@22.0.0':
     resolution: {integrity: sha512-rLPm6IHRLnhtJgrrZBf/4vOs3A+pI1FJRKALEKgX0dAiUYrir9Bu0RdNQbt7TGOCUoqm635uJeKOeYAZP6xO8A==}
+    engines: {node: '>=22.0.0'}
+
+  '@googleapis/tasks@17.0.0':
+    resolution: {integrity: sha512-JiGDGAAS/sPZ9Rmov3tATtuN0MG7dbVFpppspLvYyGwQHEPy2aqO2S2fsKcfFjpKvQBd1BmNgLgxYhg+sJvxFg==}
     engines: {node: '>=22.0.0'}
 
   '@grammyjs/types@5.0.0':
@@ -2233,7 +2247,19 @@ snapshots:
       '@eslint/core': 0.17.0
       levn: 0.4.1
 
+  '@googleapis/calendar@20.0.0':
+    dependencies:
+      googleapis-common: 9.1.0
+    transitivePeerDependencies:
+      - supports-color
+
   '@googleapis/gmail@22.0.0':
+    dependencies:
+      googleapis-common: 9.1.0
+    transitivePeerDependencies:
+      - supports-color
+
+  '@googleapis/tasks@17.0.0':
     dependencies:
       googleapis-common: 9.1.0
     transitivePeerDependencies:

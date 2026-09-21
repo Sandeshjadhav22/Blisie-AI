@@ -35,3 +35,9 @@ export const EMAIL_SYNC_JOBS = {
   dispatch: 'dispatch',
   syncUser: 'sync-user',
 } as const;
+
+/** Job names on the calendar-sync queue. Duplicated in the worker — change both together. */
+export const CALENDAR_SYNC_JOBS = {
+  dispatch: 'dispatch',
+  syncUser: 'sync-user',
+} as const;

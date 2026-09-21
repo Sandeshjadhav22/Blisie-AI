@@ -22,7 +22,9 @@
     "redis:down": "docker compose down"
   },
   "dependencies": {
+    "@googleapis/calendar": "^20.0.0",
     "@googleapis/gmail": "^22.0.0",
+    "@googleapis/tasks": "^17.0.0",
     "bullmq": "^6.3.8",
     "compression": "^1.8.2",
     "cookie-parser": "^1.4.7",

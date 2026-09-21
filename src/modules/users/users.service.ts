@@ -1,5 +1,6 @@
 import { type UserDocument, UserModel } from '../../models/user.model.js';
 import type { GoogleProfile } from '../integrations/google/google-oauth.js';
+import { ValidationError } from '../../utils/errors.js';
 import type { UpdateMeInput } from './users.schemas.js';
 
 export interface PublicUser {
@@ -13,6 +14,8 @@ export interface PublicUser {
   preferences: {
     dailyBriefingEnabled: boolean;
     dailyBriefingTime: string;
+    workingHoursStart: string;
+    workingHoursEnd: string;
   };
   onboardingCompleted: boolean;
   createdAt: string;
@@ -30,6 +33,8 @@ export function toPublicUser(user: UserDocument): PublicUser {
     preferences: {
       dailyBriefingEnabled: user.preferences.dailyBriefingEnabled,
       dailyBriefingTime: user.preferences.dailyBriefingTime,
+      workingHoursStart: user.preferences.workingHoursStart,
+      workingHoursEnd: user.preferences.workingHoursEnd,
     },
     onboardingCompleted: Boolean(user.onboardingCompletedAt),
     createdAt: user.createdAt.toISOString(),
@@ -72,8 +77,18 @@ export async function updateUser(user: UserDocument, input: UpdateMeInput): Prom
   if (input.preferences?.dailyBriefingEnabled !== undefined) {
     user.set('preferences.dailyBriefingEnabled', input.preferences.dailyBriefingEnabled);
   }
-  if (input.preferences?.dailyBriefingTime !== undefined) {
-    user.set('preferences.dailyBriefingTime', input.preferences.dailyBriefingTime);
+  for (const key of ['dailyBriefingTime', 'workingHoursStart', 'workingHoursEnd'] as const) {
+    const value = input.preferences?.[key];
+    if (value !== undefined) user.set(`preferences.${key}`, value);
+  }
+  // A partial update can still produce inverted hours (e.g. only moving the start later).
+  if (user.preferences.workingHoursStart >= user.preferences.workingHoursEnd) {
+    throw new ValidationError([
+      {
+        path: ['preferences', 'workingHoursEnd'],
+        message: 'working hours must end after they start',
+      },
+    ]);
   }
   if (input.onboardingCompleted === true && !user.onboardingCompletedAt) {
     user.onboardingCompletedAt = new Date();

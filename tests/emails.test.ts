@@ -203,11 +203,14 @@ describe('GET /emails/:id and /emails/threads/:id', () => {
     expect(res.body.error.code).toBe('GOOGLE_API_ERROR');
   });
 
-  it('asks to connect Google first', async () => {
+  it('asks to connect Gmail first', async () => {
     const { cookie } = await createSignedInUser();
     const res = await request(app).get('/api/v1/emails/m1').set('Cookie', cookie);
     expect(res.status).toBe(409);
-    expect(res.body.error.code).toBe('GOOGLE_NOT_CONNECTED');
+    expect(res.body.error).toMatchObject({
+      code: 'GOOGLE_FEATURE_NOT_CONNECTED',
+      message: 'Connect Gmail in Settings first',
+    });
   });
 
   it('rejects malformed ids', async () => {

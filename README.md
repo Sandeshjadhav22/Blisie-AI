@@ -60,6 +60,23 @@ responder handles slash commands and echoes everything else until the agent arri
 - Disconnecting Google deletes all synced email.
 - In Telegram, `/inbox` lists today's email (in the user's timezone).
 
+## Calendar and Tasks
+
+- The **worker** keeps a rolling window of the primary calendar (1 day back, 30 days ahead,
+  recurring events expanded) in `calendarevents`, re-reading the whole window every 5 minutes and
+  removing anything Google no longer returns. Connecting Calendar triggers a sync straight away.
+- `GET /calendar/events` reads that copy. Local days use the user's timezone, and all-day events
+  are matched by date.
+- **Free time** (`GET /calendar/availability`) uses live Google data within the user's working
+  hours (Settings → Account). It skips declined and "free" events and never suggests past times.
+- **Writes** (create, move, cancel) go straight to Google, then update the local copy. Guests are
+  emailed only when the event has guests. Moving only the start keeps the duration ("move my 3 PM
+  to 4").
+- **Google Tasks** are read and written live on the default list.
+- Telegram: `/today` (meetings), `/free [today|tomorrow|YYYY-MM-DD]`, `/tasks`.
+- Calling a feature that isn't connected returns `409 GOOGLE_FEATURE_NOT_CONNECTED` with a
+  "Connect … in Settings" message.
+
 ### How auth works
 
 - **Sign-in** (`GET /api/v1/auth/google`) asks only for `openid email profile`. The backend creates
@@ -106,6 +123,14 @@ responder handles slash commands and echoes everything else until the agent arri
 | `GET /emails/:id`                                                                 | ✓      | Full message with body (live from Gmail)                    |
 | `GET /emails/threads/:id`                                                         | ✓      | Whole thread (live from Gmail)                              |
 | `POST /emails/sync`                                                               | ✓      | Queue a sync now (deduplicated per user)                    |
+| `GET /calendar/events?date=&days=`                                                | ✓      | Events for local day(s), default today                      |
+| `GET /calendar/availability?date=&days=&duration=&includeWeekends=&limit=`        | ✓      | Free intervals + suggested slots (live)                     |
+| `POST /calendar/events`                                                           | ✓      | Create (invites guests if any)                              |
+| `PATCH /calendar/events/:id`                                                      | ✓      | Update / move (start-only keeps duration)                   |
+| `DELETE /calendar/events/:id`                                                     | ✓      | Cancel                                                      |
+| `POST /calendar/sync`                                                             | ✓      | Queue a calendar sync now                                   |
+| `GET /tasks?includeCompleted=`                                                    | ✓      | Google Tasks (default list)                                 |
+| `POST /tasks`, `PATCH /tasks/:id`, `POST /tasks/:id/complete`                     | ✓      | Create, update, complete                                    |
 
 OAuth redirects report problems back to the frontend as `?error=<code>` (see `AuthErrorCode`).
 
@@ -122,7 +147,7 @@ src/
   config/             env validation (zod), constants, queue names
   middleware/         error handler, request logger, zod validation
   modules/            feature modules (auth, users, telegram, integrations, agent, …)
-  models/             mongoose models (User, Integration, Conversation, Message, Email)
+  models/             mongoose models (User, Integration, Conversation, Message, Email, CalendarEvent)
   services/           database, redis
   jobs/               BullMQ queue producers
   utils/              logger, errors, AES-256-GCM crypto for tokens at rest

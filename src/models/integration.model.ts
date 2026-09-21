@@ -29,6 +29,11 @@ const integrationSchema = new Schema(
       lastSyncedAt: { type: Date },
       lastError: { type: String },
     },
+    // Rolling-window calendar sync state, maintained by the worker.
+    calendarSync: {
+      lastSyncedAt: { type: Date },
+      lastError: { type: String },
+    },
   },
   { timestamps: true },
 );

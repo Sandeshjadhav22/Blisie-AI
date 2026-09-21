@@ -9,7 +9,10 @@ export type CommandHandler = (message: IncomingMessage, args: string) => Promise
 const HELP_TEXT = [
   "Hi! I'm your assistant. Here's what I can do so far:",
   '',
+  '/today — your meetings today',
+  '/free — free time tomorrow (or /free today, /free 2026-10-01)',
   '/inbox — emails you received today',
+  '/tasks — your open Google Tasks',
   '/help — show this message',
   '',
   "Soon you'll be able to just ask me things, and I'll keep track of what you've promised people and send you a morning briefing.",

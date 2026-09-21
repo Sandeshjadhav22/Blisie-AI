@@ -5,6 +5,7 @@ import { rateLimit } from 'express-rate-limit';
 
 import { OAUTH_STATE_COOKIE } from '../../config/constants.js';
 import { isTest } from '../../config/env.js';
+import { enqueueCalendarSync } from '../../jobs/calendar-sync.js';
 import { enqueueEmailSync } from '../../jobs/email-sync.js';
 import { getAuthUser, requireAuth, resolveSessionUser } from '../../middleware/require-auth.js';
 import { AppError } from '../../utils/errors.js';
@@ -168,13 +169,16 @@ async function completeConnect(
   }
 
   const integration = await saveGoogleIntegration(user._id, profile, tokens);
-  if (featuresFromScopes(integration.scopes).gmail) {
-    // Start the first sync now rather than waiting for the next scheduled run. A queue problem
-    // must not fail the connection; the scheduled sync will pick the user up anyway.
-    try {
-      await enqueueEmailSync(user.id);
-    } catch (error) {
-      logger.error({ err: error, userId: user.id }, 'Failed to queue initial email sync');
+  // Start the first syncs now rather than waiting for the next scheduled run. A queue problem
+  // must not fail the connection; the scheduled syncs will pick the user up anyway.
+  const features = featuresFromScopes(integration.scopes);
+  const syncs = [
+    ...(features.gmail ? [enqueueEmailSync(user.id)] : []),
+    ...(features.calendar ? [enqueueCalendarSync(user.id)] : []),
+  ];
+  for (const result of await Promise.allSettled(syncs)) {
+    if (result.status === 'rejected') {
+      logger.error({ err: result.reason, userId: user.id }, 'Failed to queue initial sync');
     }
   }
   logger.info({ userId: user.id, features: oauthState.features }, 'Google features connected');
