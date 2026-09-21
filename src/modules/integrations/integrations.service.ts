@@ -1,6 +1,11 @@
 import type { Types } from 'mongoose';
 
-import { type IntegrationDocument, IntegrationModel } from '../../models/integration.model.js';
+import { EmailModel } from '../../models/email.model.js';
+import {
+  type IntegrationDocument,
+  IntegrationModel,
+  REAUTH_REQUIRED,
+} from '../../models/integration.model.js';
 import { decrypt, encrypt } from '../../utils/crypto.js';
 import { logger } from '../../utils/logger.js';
 import { type GoogleProfile, type GoogleTokens, revokeGoogleToken } from './google/google-oauth.js';
@@ -12,6 +17,8 @@ export interface PublicIntegration {
   email: string | null;
   scopes: string[];
   features: Record<GoogleFeature, boolean>;
+  needsReconnect: boolean;
+  gmailLastSyncedAt: string | null;
   connectedAt: string;
   updatedAt: string;
 }
@@ -23,6 +30,8 @@ export function toPublicIntegration(integration: IntegrationDocument): PublicInt
     email: integration.email ?? null,
     scopes: integration.scopes,
     features: featuresFromScopes(integration.scopes),
+    needsReconnect: integration.lastError === REAUTH_REQUIRED,
+    gmailLastSyncedAt: integration.gmailSync?.lastSyncedAt?.toISOString() ?? null,
     connectedAt: integration.createdAt.toISOString(),
     updatedAt: integration.updatedAt.toISOString(),
   };
@@ -90,6 +99,7 @@ export async function disconnectGoogle(userId: Types.ObjectId): Promise<boolean>
     }
   }
 
-  await integration.deleteOne();
+  // Nothing synced from Google outlives the connection.
+  await Promise.all([integration.deleteOne(), EmailModel.deleteMany({ userId })]);
   return true;
 }

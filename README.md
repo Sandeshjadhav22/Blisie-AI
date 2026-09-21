@@ -48,6 +48,18 @@ Messages flow **Telegram adapter → `IncomingMessage` → message handler → r
 is the only Telegram-specific code, so WhatsApp or web chat can reuse everything after it. The
 responder handles slash commands and echoes everything else until the agent arrives (Phase 6).
 
+## Gmail
+
+- The **worker** syncs email _metadata_ (sender, subject, snippet, labels) into the `emails`
+  collection: the last 14 days on first sync, then only changes, using Gmail's history API, every
+  5 minutes. Connecting Gmail triggers a sync straight away.
+- Search (`GET /emails`) runs on that metadata in MongoDB. Full bodies and threads are fetched
+  live from Gmail when asked for, and never stored.
+- Access tokens refresh automatically. If Google revokes the grant, the integration is flagged
+  `needsReconnect` and the web app shows a Reconnect button.
+- Disconnecting Google deletes all synced email.
+- In Telegram, `/inbox` lists today's email (in the user's timezone).
+
 ### How auth works
 
 - **Sign-in** (`GET /api/v1/auth/google`) asks only for `openid email profile`. The backend creates
@@ -74,22 +86,26 @@ responder handles slash commands and echoes everything else until the agent arri
 - `GET /health/ready` — readiness (MongoDB + Redis), `503` when a dependency is down
 - `/api/v1/*` — versioned API (rate limited)
 
-| Method & path                                          | Auth   | What it does                                                |
-| ------------------------------------------------------ | ------ | ----------------------------------------------------------- |
-| `GET /auth/google?returnTo=`                           | –      | Redirects to Google sign-in                                 |
-| `GET /auth/google/callback`                            | –      | OAuth redirect URI for sign-in and connect                  |
-| `POST /auth/logout`                                    | –      | Clears the session cookie                                   |
-| `POST /auth/logout-all`                                | ✓      | Signs out every device                                      |
-| `GET /users/me`                                        | ✓      | Current user                                                |
-| `PATCH /users/me`                                      | ✓      | Name, timezone, briefing preferences, `onboardingCompleted` |
-| `GET /integrations`                                    | ✓      | Connected services (never includes tokens)                  |
-| `GET /integrations/google/connect?features=&returnTo=` | cookie | Redirects to Google to grant feature scopes                 |
-| `DELETE /integrations/google`                          | ✓      | Revokes the grant at Google and deletes the tokens          |
-| `POST /telegram/link`                                  | ✓      | One-time `t.me` deep link for connecting Telegram           |
-| `DELETE /telegram/link`                                | ✓      | Disconnects Telegram                                        |
-| `POST /telegram/webhook`                               | secret | Telegram updates (webhook mode)                             |
-| `GET /conversations`                                   | ✓      | The user's conversations                                    |
-| `GET /conversations/:id/messages?limit=&before=`       | ✓      | Messages, newest first                                      |
+| Method & path                                                                     | Auth   | What it does                                                |
+| --------------------------------------------------------------------------------- | ------ | ----------------------------------------------------------- |
+| `GET /auth/google?returnTo=`                                                      | –      | Redirects to Google sign-in                                 |
+| `GET /auth/google/callback`                                                       | –      | OAuth redirect URI for sign-in and connect                  |
+| `POST /auth/logout`                                                               | –      | Clears the session cookie                                   |
+| `POST /auth/logout-all`                                                           | ✓      | Signs out every device                                      |
+| `GET /users/me`                                                                   | ✓      | Current user                                                |
+| `PATCH /users/me`                                                                 | ✓      | Name, timezone, briefing preferences, `onboardingCompleted` |
+| `GET /integrations`                                                               | ✓      | Connected services (never includes tokens)                  |
+| `GET /integrations/google/connect?features=&returnTo=`                            | cookie | Redirects to Google to grant feature scopes                 |
+| `DELETE /integrations/google`                                                     | ✓      | Revokes the grant at Google and deletes the tokens          |
+| `POST /telegram/link`                                                             | ✓      | One-time `t.me` deep link for connecting Telegram           |
+| `DELETE /telegram/link`                                                           | ✓      | Disconnects Telegram                                        |
+| `POST /telegram/webhook`                                                          | secret | Telegram updates (webhook mode)                             |
+| `GET /conversations`                                                              | ✓      | The user's conversations                                    |
+| `GET /conversations/:id/messages?limit=&before=`                                  | ✓      | Messages, newest first                                      |
+| `GET /emails?q=&from=&after=&before=&today=&unread=&important=&inboxOnly=&limit=` | ✓      | Search synced email                                         |
+| `GET /emails/:id`                                                                 | ✓      | Full message with body (live from Gmail)                    |
+| `GET /emails/threads/:id`                                                         | ✓      | Whole thread (live from Gmail)                              |
+| `POST /emails/sync`                                                               | ✓      | Queue a sync now (deduplicated per user)                    |
 
 OAuth redirects report problems back to the frontend as `?error=<code>` (see `AuthErrorCode`).
 
@@ -106,7 +122,7 @@ src/
   config/             env validation (zod), constants, queue names
   middleware/         error handler, request logger, zod validation
   modules/            feature modules (auth, users, telegram, integrations, agent, …)
-  models/             mongoose models (User, Integration)
+  models/             mongoose models (User, Integration, Conversation, Message, Email)
   services/           database, redis
   jobs/               BullMQ queue producers
   utils/              logger, errors, AES-256-GCM crypto for tokens at rest

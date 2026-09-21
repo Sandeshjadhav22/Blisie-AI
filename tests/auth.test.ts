@@ -2,6 +2,8 @@ import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createApp } from '../src/app.js';
+import { enqueueEmailSync } from '../src/jobs/email-sync.js';
+import { EmailModel } from '../src/models/email.model.js';
 import { IntegrationModel } from '../src/models/integration.model.js';
 import { UserModel } from '../src/models/user.model.js';
 import {
@@ -14,6 +16,7 @@ import type * as GoogleOAuthModule from '../src/modules/integrations/google/goog
 import { decrypt } from '../src/utils/crypto.js';
 import { useTestDatabase } from './helpers/db.js';
 
+vi.mock('../src/jobs/email-sync.js', () => ({ enqueueEmailSync: vi.fn() }));
 vi.mock('../src/modules/integrations/google/google-oauth.js', async (importOriginal) => ({
   ...(await importOriginal<typeof GoogleOAuthModule>()),
   exchangeCodeForTokens: vi.fn(),
@@ -333,6 +336,8 @@ describe('Google integration', () => {
       }),
     ]);
     expect(JSON.stringify(list.body)).not.toContain('gmail-refresh');
+    // Connecting Gmail kicks off the first sync straight away.
+    expect(enqueueEmailSync).toHaveBeenCalledWith(expect.any(String));
   });
 
   it('keeps the previous refresh token when Google omits it, and flags a missing one', async () => {
@@ -386,10 +391,22 @@ describe('Google integration', () => {
     });
     await agent.get('/api/v1/auth/google/callback').query({ code: 'c', state });
 
+    const [user] = await UserModel.find();
+    await EmailModel.create({
+      userId: user?._id,
+      gmailId: 'm1',
+      threadId: 't1',
+      receivedAt: new Date(),
+    });
+
     const res = await agent.delete('/api/v1/integrations/google');
     expect(res.status).toBe(204);
     expect(revokeGoogleToken).toHaveBeenCalledWith('tasks-refresh');
     expect(await IntegrationModel.countDocuments()).toBe(0);
+    // Synced mail doesn't outlive the connection.
+    expect(await EmailModel.countDocuments()).toBe(0);
+    // Tasks-only connections don't trigger an email sync.
+    expect(enqueueEmailSync).not.toHaveBeenCalled();
 
     expect((await agent.delete('/api/v1/integrations/google')).status).toBe(404);
   });

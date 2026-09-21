@@ -5,6 +5,7 @@ import { rateLimit } from 'express-rate-limit';
 
 import { OAUTH_STATE_COOKIE } from '../../config/constants.js';
 import { isTest } from '../../config/env.js';
+import { enqueueEmailSync } from '../../jobs/email-sync.js';
 import { getAuthUser, requireAuth, resolveSessionUser } from '../../middleware/require-auth.js';
 import { AppError } from '../../utils/errors.js';
 import { logger } from '../../utils/logger.js';
@@ -14,7 +15,7 @@ import {
   exchangeCodeForTokens,
   isGoogleConfigured,
 } from '../integrations/google/google-oauth.js';
-import { LOGIN_SCOPES } from '../integrations/google/google.scopes.js';
+import { featuresFromScopes, LOGIN_SCOPES } from '../integrations/google/google.scopes.js';
 import { saveGoogleIntegration } from '../integrations/integrations.service.js';
 import { revokeAllSessions, upsertUserFromGoogle } from '../users/users.service.js';
 import {
@@ -166,7 +167,16 @@ async function completeConnect(
     return;
   }
 
-  await saveGoogleIntegration(user._id, profile, tokens);
+  const integration = await saveGoogleIntegration(user._id, profile, tokens);
+  if (featuresFromScopes(integration.scopes).gmail) {
+    // Start the first sync now rather than waiting for the next scheduled run. A queue problem
+    // must not fail the connection; the scheduled sync will pick the user up anyway.
+    try {
+      await enqueueEmailSync(user.id);
+    } catch (error) {
+      logger.error({ err: error, userId: user.id }, 'Failed to queue initial email sync');
+    }
+  }
   logger.info({ userId: user.id, features: oauthState.features }, 'Google features connected');
   res.redirect(
     frontendUrl(oauthState.returnTo ?? '/settings/integrations', { connected: 'google' }),

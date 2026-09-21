@@ -9,9 +9,10 @@ export type CommandHandler = (message: IncomingMessage, args: string) => Promise
 const HELP_TEXT = [
   "Hi! I'm your assistant. Here's what I can do so far:",
   '',
+  '/inbox — emails you received today',
   '/help — show this message',
   '',
-  "Soon I'll read your email and calendar, keep track of what you've promised people, and send you a morning briefing.",
+  "Soon you'll be able to just ask me things, and I'll keep track of what you've promised people and send you a morning briefing.",
 ].join('\n');
 
 const commands = new Map<string, CommandHandler>([

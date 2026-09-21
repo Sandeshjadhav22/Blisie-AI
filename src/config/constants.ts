@@ -28,3 +28,10 @@ export const QUEUE_NAMES = {
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
+
+/** Job names on the email-sync queue. Duplicated in the worker — change both together. */
+export const EMAIL_SYNC_JOBS = {
+  /** Scheduled: finds every Gmail-connected user and queues a syncUser job for each. */
+  dispatch: 'dispatch',
+  syncUser: 'sync-user',
+} as const;

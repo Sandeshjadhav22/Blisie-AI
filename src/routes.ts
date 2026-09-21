@@ -2,6 +2,8 @@ import { Router } from 'express';
 
 import { authRouter } from './modules/auth/auth.routes.js';
 import { conversationsRouter } from './modules/conversations/conversations.routes.js';
+import { registerGmailCommands } from './modules/integrations/gmail/gmail.commands.js';
+import { emailsRouter } from './modules/integrations/gmail/gmail.routes.js';
 import { integrationsRouter } from './modules/integrations/integrations.routes.js';
 import { telegramRouter } from './modules/telegram/telegram.routes.js';
 import { usersRouter } from './modules/users/users.routes.js';
@@ -18,3 +20,7 @@ apiRouter.use('/users', usersRouter);
 apiRouter.use('/integrations', integrationsRouter);
 apiRouter.use('/telegram', telegramRouter);
 apiRouter.use('/conversations', conversationsRouter);
+apiRouter.use('/emails', emailsRouter);
+
+// Chat commands contributed by feature modules.
+registerGmailCommands();
