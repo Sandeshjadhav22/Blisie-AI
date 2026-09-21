@@ -1,0 +1,31 @@
+import { type HydratedDocument, type InferSchemaType, model, Schema } from 'mongoose';
+
+export const INTEGRATION_PROVIDERS = ['google'] as const;
+export type IntegrationProvider = (typeof INTEGRATION_PROVIDERS)[number];
+
+export const INTEGRATION_STATUSES = ['active', 'error'] as const;
+
+const integrationSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    provider: { type: String, enum: INTEGRATION_PROVIDERS, required: true },
+    // The account's ID at the provider (Google `sub`) and its email.
+    providerAccountId: { type: String, required: true },
+    email: { type: String },
+    // Encrypted with utils/crypto. Never selected unless explicitly requested.
+    accessToken: { type: String, select: false },
+    refreshToken: { type: String, select: false },
+    scopes: { type: [String], default: [] },
+    expiresAt: { type: Date },
+    status: { type: String, enum: INTEGRATION_STATUSES, required: true, default: 'active' },
+    lastError: { type: String },
+  },
+  { timestamps: true },
+);
+
+integrationSchema.index({ userId: 1, provider: 1 }, { unique: true });
+
+export type Integration = InferSchemaType<typeof integrationSchema>;
+export type IntegrationDocument = HydratedDocument<Integration>;
+
+export const IntegrationModel = model('Integration', integrationSchema);

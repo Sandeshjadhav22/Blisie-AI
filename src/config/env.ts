@@ -22,6 +22,9 @@ const envSchema = z.object({
   // Comma-separated list of origins allowed to call the API with credentials.
   CORS_ORIGINS: commaList,
   FRONTEND_URL: z.url().default('http://localhost:3000'),
+  // Set when frontend and API are on different subdomains (e.g. `.example.com`) so the
+  // frontend can see the session cookie. Leave empty for localhost.
+  COOKIE_DOMAIN: z.string().optional(),
 
   MONGODB_URI: z.string().min(1),
   REDIS_URL: z.string().min(1).default('redis://localhost:6390'),
@@ -29,7 +32,7 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32),
   ENCRYPTION_KEY: base64Key32,
 
-  // Required from Phase 2 (Google OAuth).
+  // Google OAuth. The API boots without them, but /auth and /integrations return 503.
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_REDIRECT_URI: z.url().optional(),

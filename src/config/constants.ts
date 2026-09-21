@@ -6,6 +6,12 @@ export const REQUEST_BODY_LIMIT = '1mb';
 
 export const SHUTDOWN_TIMEOUT_MS = 10_000;
 
+export const SESSION_COOKIE = 'assistant_session';
+export const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+
+export const OAUTH_STATE_COOKIE = 'assistant_oauth';
+export const OAUTH_STATE_TTL_SECONDS = 10 * 60;
+
 /**
  * BullMQ queue names. The worker repo keeps an identical copy in
  * worker/src/config/constants.ts — change both together.
