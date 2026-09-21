@@ -1,6 +1,7 @@
 import type { Types } from 'mongoose';
 
 import type { UserDocument } from '../../models/user.model.js';
+import { summarizeError } from '../../utils/error-summary.js';
 import { logger } from '../../utils/logger.js';
 import { loadContext } from './context.js';
 import { executeToolCall } from './executor.js';
@@ -49,6 +50,9 @@ function failureReply(error: unknown): string {
   if (error instanceof LlmError) {
     if (error.kind === 'rate_limited')
       return "I'm getting a lot of requests right now. Try again in a minute.";
+    if (error.kind === 'quota_exhausted') {
+      return "I've hit today's AI usage limit, so I can't answer questions until it resets. Shortcuts like /today, /inbox and /tasks still work.";
+    }
     if (error.kind === 'blocked') return "Sorry, I can't help with that one.";
   }
   return 'Sorry, something went wrong on my side. Please try again in a moment.';
@@ -78,7 +82,10 @@ export async function runAgent(input: AgentRunInput): Promise<AgentRunResult> {
     try {
       response = await provider.generate({ system, messages, tools: specs });
     } catch (error) {
-      logger.error({ err: error, userId: input.user.id, step }, 'LLM request failed');
+      logger.error(
+        { userId: input.user.id, step, error: summarizeError(error) },
+        'LLM request failed',
+      );
       return { reply: failureReply(error), toolCalls, steps: step, usage, model: provider.model };
     }
     usage.inputTokens = (usage.inputTokens ?? 0) + (response.usage?.inputTokens ?? 0);

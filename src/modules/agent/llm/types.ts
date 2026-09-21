@@ -67,7 +67,8 @@ export interface LlmProvider {
 /** Errors a provider raises that the orchestrator turns into a friendly reply. */
 export class LlmError extends Error {
   constructor(
-    public readonly kind: 'rate_limited' | 'unavailable' | 'blocked' | 'invalid_request',
+    public readonly kind:
+      'rate_limited' | 'quota_exhausted' | 'unavailable' | 'blocked' | 'invalid_request',
     message: string,
   ) {
     super(message);

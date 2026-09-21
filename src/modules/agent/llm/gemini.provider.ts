@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 
 import { ApiError, type Content, GoogleGenAI, type Part } from '@google/genai';
 
+import { logger } from '../../../utils/logger.js';
+import { withRetry } from './retry.js';
 import {
   type AgentMessage,
   LlmError,
@@ -55,6 +57,20 @@ export function fromGeminiContent(content: Content | undefined): Omit<LlmRespons
   return { text: text || null, toolCalls, raw: content };
 }
 
+const TRANSIENT_STATUSES = new Set([429, 500, 502, 503, 504]);
+
+/** A daily quota is used up: nothing works again until it resets, so don't retry. */
+export function isDailyQuotaExhausted(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 429 && /PerDay/i.test(error.message);
+}
+
+/** Overloaded, rate-limited or briefly down — worth another try. Network errors too. */
+export function isTransient(error: unknown): boolean {
+  if (isDailyQuotaExhausted(error)) return false;
+  if (error instanceof ApiError) return TRANSIENT_STATUSES.has(error.status);
+  return error instanceof TypeError; // fetch failed (connection reset, DNS blip)
+}
+
 export class GeminiProvider implements LlmProvider {
   readonly name = 'gemini';
   private readonly client: GoogleGenAI;
@@ -67,9 +83,8 @@ export class GeminiProvider implements LlmProvider {
   }
 
   async generate(request: LlmRequest): Promise<LlmResponse> {
-    let response;
-    try {
-      response = await this.client.models.generateContent({
+    const call = () =>
+      this.client.models.generateContent({
         model: this.model,
         contents: toGeminiContents(request.messages),
         config: {
@@ -89,8 +104,24 @@ export class GeminiProvider implements LlmProvider {
           automaticFunctionCalling: { disable: true },
         },
       });
+
+    let response;
+    try {
+      // "Model overloaded" (503) and rate limits (429) are usually over within seconds.
+      response = await withRetry(call, {
+        attempts: 3,
+        delaysMs: [1_500, 4_000],
+        isRetryable: isTransient,
+        onRetry: (error, attempt, delayMs) => {
+          logger.warn(
+            { model: this.model, attempt, delayMs, status: (error as ApiError).status },
+            'Gemini busy, retrying',
+          );
+        },
+      });
     } catch (error) {
       if (error instanceof ApiError) {
+        if (isDailyQuotaExhausted(error)) throw new LlmError('quota_exhausted', error.message);
         if (error.status === 429) throw new LlmError('rate_limited', error.message);
         if (error.status >= 500) throw new LlmError('unavailable', error.message);
         throw new LlmError('invalid_request', error.message);
