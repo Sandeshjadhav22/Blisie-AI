@@ -1,0 +1,20 @@
+# Local infrastructure. MongoDB runs on Atlas (see MONGODB_URI in .env).
+# Redis is exposed on 6390 so it doesn't clash with a locally installed Redis on 6379.
+services:
+  redis:
+    image: redis:8-alpine
+    container_name: assistant-redis
+    command: ['redis-server', '--appendonly', 'yes', '--maxmemory-policy', 'noeviction']
+    ports:
+      - '6390:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  redis-data:
