@@ -17,6 +17,10 @@ export default defineConfig({
       GOOGLE_CLIENT_ID: 'test-client-id.apps.googleusercontent.com',
       GOOGLE_CLIENT_SECRET: 'test-client-secret',
       GOOGLE_REDIRECT_URI: 'http://localhost:4000/api/v1/auth/google/callback',
+      PUBLIC_API_URL: 'https://api.example.test',
+      TELEGRAM_BOT_TOKEN: '123456:test-token',
+      TELEGRAM_WEBHOOK_SECRET: 'test-webhook-secret-0123456789',
+      TELEGRAM_MODE: 'webhook',
     },
   },
 });

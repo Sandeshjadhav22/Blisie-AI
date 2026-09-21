@@ -32,6 +32,22 @@ openssl rand -base64 32     # ENCRYPTION_KEY (must be 32 bytes; share it with th
 `gmail.readonly` is a _restricted_ scope: fine for test users, but going public needs Google's
 verification and a security assessment. Plan for that before launch.
 
+## Telegram setup
+
+1. Message [@BotFather](https://t.me/BotFather) → `/newbot`, and put the token in `.env` as
+   `TELEGRAM_BOT_TOKEN`.
+2. Run `pnpm dev`. In development the API **long-polls** Telegram, so no public URL or tunnel is
+   needed. Only one process can poll a bot at a time.
+3. In the web app, open onboarding or Settings → Integrations → **Connect Telegram**. That opens
+   `t.me/<bot>?start=<one-time code>`; pressing Start links the account.
+
+In production set `TELEGRAM_MODE=webhook`, `PUBLIC_API_URL` and `TELEGRAM_WEBHOOK_SECRET`. The API
+registers `POST /api/v1/telegram/webhook` on startup, and Telegram signs each call with the secret.
+
+Messages flow **Telegram adapter → `IncomingMessage` → message handler → responder**. The adapter
+is the only Telegram-specific code, so WhatsApp or web chat can reuse everything after it. The
+responder handles slash commands and echoes everything else until the agent arrives (Phase 6).
+
 ### How auth works
 
 - **Sign-in** (`GET /api/v1/auth/google`) asks only for `openid email profile`. The backend creates
@@ -69,6 +85,11 @@ verification and a security assessment. Plan for that before launch.
 | `GET /integrations`                                    | ✓      | Connected services (never includes tokens)                  |
 | `GET /integrations/google/connect?features=&returnTo=` | cookie | Redirects to Google to grant feature scopes                 |
 | `DELETE /integrations/google`                          | ✓      | Revokes the grant at Google and deletes the tokens          |
+| `POST /telegram/link`                                  | ✓      | One-time `t.me` deep link for connecting Telegram           |
+| `DELETE /telegram/link`                                | ✓      | Disconnects Telegram                                        |
+| `POST /telegram/webhook`                               | secret | Telegram updates (webhook mode)                             |
+| `GET /conversations`                                   | ✓      | The user's conversations                                    |
+| `GET /conversations/:id/messages?limit=&before=`       | ✓      | Messages, newest first                                      |
 
 OAuth redirects report problems back to the frontend as `?error=<code>` (see `AuthErrorCode`).
 

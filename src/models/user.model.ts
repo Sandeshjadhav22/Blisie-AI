@@ -17,8 +17,12 @@ const userSchema = new Schema(
     googleId: { type: String, unique: true, sparse: true },
     // IANA timezone, e.g. "Asia/Kolkata". Set during onboarding.
     timezone: { type: String, required: true, default: 'UTC' },
-    // Telegram user IDs can exceed 32 bits, so they're stored as strings. Linked in Phase 3.
+    // Telegram user IDs can exceed 32 bits, so they're stored as strings.
     telegramId: { type: String, unique: true, sparse: true },
+    telegramUsername: { type: String },
+    // One-time code for linking Telegram (sha256 of the code in the deep link).
+    telegramLinkCodeHash: { type: String, select: false, index: { sparse: true } },
+    telegramLinkCodeExpiresAt: { type: Date, select: false },
     preferences: { type: preferencesSchema, default: () => ({}) },
     onboardingCompletedAt: { type: Date },
     // Incrementing this invalidates every existing session ("log out everywhere").

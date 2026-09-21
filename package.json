@@ -39,6 +39,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@grammyjs/types": "^5.0.0",
     "@types/compression": "^1.8.1",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",

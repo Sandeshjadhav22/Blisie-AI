@@ -54,6 +54,9 @@ importers:
       '@eslint/js':
         specifier: ^9.39.5
         version: 9.39.5
+      '@grammyjs/types':
+        specifier: ^5.0.0
+        version: 5.0.0
       '@types/compression':
         specifier: ^1.8.1
         version: 1.8.1
@@ -301,6 +304,9 @@ packages:
   '@eslint/plugin-kit@0.4.1':
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+
+  '@grammyjs/types@5.0.0':
+    resolution: {integrity: sha512-iq1Qrq1iPKkB8yAa0qSuIURMZOCuqTY5pWy5gHpCeL1oQ+GPadGhw/cDTVE8waJwuCzacUzuIjRv1sESvk7u7A==}
 
   '@humanfs/core@0.19.2':
     resolution: {integrity: sha512-UhXNm+CFMWcbChXywFwkmhqjs3PRCmcSa/hfBgLIb7oQ5HNb1wS0icWsGtSAUNgefHeI+eBrA8I1fxmbHsGdvA==}
@@ -2212,6 +2218,8 @@ snapshots:
     dependencies:
       '@eslint/core': 0.17.0
       levn: 0.4.1
+
+  '@grammyjs/types@5.0.0': {}
 
   '@humanfs/core@0.19.2':
     dependencies:

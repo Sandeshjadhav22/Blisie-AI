@@ -9,6 +9,7 @@ export interface PublicUser {
   avatarUrl: string | null;
   timezone: string;
   telegramLinked: boolean;
+  telegramUsername: string | null;
   preferences: {
     dailyBriefingEnabled: boolean;
     dailyBriefingTime: string;
@@ -25,6 +26,7 @@ export function toPublicUser(user: UserDocument): PublicUser {
     avatarUrl: user.avatarUrl ?? null,
     timezone: user.timezone,
     telegramLinked: Boolean(user.telegramId),
+    telegramUsername: user.telegramUsername ?? null,
     preferences: {
       dailyBriefingEnabled: user.preferences.dailyBriefingEnabled,
       dailyBriefingTime: user.preferences.dailyBriefingTime,

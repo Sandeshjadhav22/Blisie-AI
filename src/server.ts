@@ -4,11 +4,13 @@ import { createApp } from './app.js';
 import { SHUTDOWN_TIMEOUT_MS } from './config/constants.js';
 import { env } from './config/env.js';
 import { closeQueues } from './jobs/queues.js';
+import { startTelegram } from './modules/telegram/telegram.runtime.js';
 import { connectDatabase, disconnectDatabase } from './services/database.js';
 import { connectRedis, disconnectRedis } from './services/redis.js';
 import { logger } from './utils/logger.js';
 
 let server: Server | undefined;
+let stopTelegram: (() => Promise<void>) | undefined;
 let shuttingDown = false;
 
 async function start(): Promise<void> {
@@ -18,6 +20,13 @@ async function start(): Promise<void> {
   server = app.listen(env.PORT, () => {
     logger.info({ port: env.PORT, env: env.NODE_ENV }, 'API server listening');
   });
+
+  // A Telegram problem (bad token, network) shouldn't take the web API down with it.
+  try {
+    stopTelegram = await startTelegram();
+  } catch (error) {
+    logger.error({ err: error }, 'Failed to start Telegram');
+  }
 }
 
 async function shutdown(signal: string, exitCode = 0): Promise<void> {
@@ -41,6 +50,7 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
         });
       });
     }
+    await stopTelegram?.();
     await closeQueues();
     await Promise.all([disconnectDatabase(), disconnectRedis()]);
     process.exit(exitCode);

@@ -16,6 +16,7 @@ export const logger = pino({
       '*.refreshToken',
       '*.password',
       '*.token',
+      'req.headers["x-telegram-bot-api-secret-token"]',
     ],
     censor: '[redacted]',
   },

@@ -37,9 +37,20 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   GOOGLE_REDIRECT_URI: z.url().optional(),
 
-  // Required from Phase 3 (Telegram).
+  // Public base URL of this API (e.g. https://api.example.com). Used to register the Telegram webhook.
+  PUBLIC_API_URL: z.url().optional(),
+
+  // Telegram. Without a bot token the Telegram channel is off.
   TELEGRAM_BOT_TOKEN: z.string().optional(),
-  TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
+  // Sent by Telegram in X-Telegram-Bot-Api-Secret-Token on every webhook call.
+  TELEGRAM_WEBHOOK_SECRET: z
+    .string()
+    .regex(/^[A-Za-z0-9_-]{16,256}$/, {
+      message: '16-256 characters of A-Z, a-z, 0-9, _ or - (generate: openssl rand -hex 32)',
+    })
+    .optional(),
+  // `polling` for local dev (no public URL needed), `webhook` in production.
+  TELEGRAM_MODE: z.enum(['webhook', 'polling', 'off']).optional(),
 
   // Required from Phase 6 (Agent). The provider sits behind an interface so it can be swapped.
   LLM_PROVIDER: z.enum(['gemini']).default('gemini'),
@@ -49,12 +60,32 @@ const envSchema = z.object({
 
 export type Env = z.infer<typeof envSchema>;
 
+function validateCrossFieldRules(value: Env, ctx: z.core.$RefinementCtx): void {
+  if (value.TELEGRAM_MODE === 'webhook') {
+    for (const key of [
+      'TELEGRAM_BOT_TOKEN',
+      'TELEGRAM_WEBHOOK_SECRET',
+      'PUBLIC_API_URL',
+    ] as const) {
+      if (!value[key]) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [key],
+          message: 'required when TELEGRAM_MODE=webhook',
+        });
+      }
+    }
+  }
+}
+
+const refinedEnvSchema = envSchema.superRefine(validateCrossFieldRules);
+
 export function parseEnv(source: NodeJS.ProcessEnv): Env {
   // Treat blank entries (e.g. `GOOGLE_CLIENT_ID=` copied from .env.example) as unset.
   const cleaned = Object.fromEntries(
     Object.entries(source).filter(([, value]) => value !== undefined && value.trim() !== ''),
   );
-  const result = envSchema.safeParse(cleaned);
+  const result = refinedEnvSchema.safeParse(cleaned);
   if (!result.success) {
     const details = result.error.issues
       .map((issue) => `  - ${issue.path.join('.')}: ${issue.message}`)

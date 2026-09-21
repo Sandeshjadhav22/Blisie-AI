@@ -41,4 +41,16 @@ describe('parseEnv', () => {
   it('rejects a short JWT secret', () => {
     expect(() => parseEnv({ ...validEnv, JWT_SECRET: 'short' })).toThrow(/JWT_SECRET/);
   });
+
+  it('requires the token, secret and public URL for webhook mode', () => {
+    expect(() => parseEnv({ ...validEnv, TELEGRAM_MODE: 'webhook' })).toThrow(
+      /TELEGRAM_BOT_TOKEN.*\n.*TELEGRAM_WEBHOOK_SECRET.*\n.*PUBLIC_API_URL/,
+    );
+  });
+
+  it('rejects a webhook secret Telegram would refuse', () => {
+    expect(() => parseEnv({ ...validEnv, TELEGRAM_WEBHOOK_SECRET: 'has spaces!' })).toThrow(
+      /TELEGRAM_WEBHOOK_SECRET/,
+    );
+  });
 });
