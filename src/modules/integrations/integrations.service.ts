@@ -1,6 +1,7 @@
 import type { Types } from 'mongoose';
 
 import { CalendarEventModel } from '../../models/calendar-event.model.js';
+import { CommitmentModel } from '../../models/commitment.model.js';
 import { EmailModel } from '../../models/email.model.js';
 import {
   type IntegrationDocument,
@@ -102,11 +103,13 @@ export async function disconnectGoogle(userId: Types.ObjectId): Promise<boolean>
     }
   }
 
-  // Nothing synced from Google outlives the connection.
+  // Nothing synced from Google outlives the connection. Commitments themselves are kept — they're
+  // the user's own promises — but the quoted email text goes with the mail.
   await Promise.all([
     integration.deleteOne(),
     EmailModel.deleteMany({ userId }),
     CalendarEventModel.deleteMany({ userId }),
+    CommitmentModel.updateMany({ userId, source: 'gmail' }, { $unset: { excerpt: 1 } }),
   ]);
   return true;
 }

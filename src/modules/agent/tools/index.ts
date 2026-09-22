@@ -1,4 +1,10 @@
 import { findFreeTime, getCalendarEvents } from './calendar.tools.js';
+import {
+  cancelCommitment,
+  completeCommitment,
+  createCommitment,
+  getCommitments,
+} from './commitment.tools.js';
 import { readEmail, searchEmailsTool } from './email.tools.js';
 import {
   forgetMemoryTool,
@@ -21,6 +27,10 @@ export const defaultTools: AgentTool[] = [
   searchEmailsTool,
   readEmail,
   getTasks,
+  getCommitments,
+  createCommitment,
+  completeCommitment,
+  cancelCommitment,
   createReminderTool,
   listRemindersTool,
   cancelReminderTool,

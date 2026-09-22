@@ -34,6 +34,13 @@ export interface EvalCase {
     memories?: { content: string; subject?: string }[];
     /** Free slots find_free_time returns (local "YYYY-MM-DDTHH:mm" starts, 30 min). */
     freeSlots?: string[];
+    /** Promises already on record. */
+    commitments?: {
+      description: string;
+      person?: string;
+      direction?: 'outgoing' | 'incoming';
+      dueLocal?: string;
+    }[];
   };
   expect: {
     /** Every one of these tools must be called. */
@@ -191,6 +198,39 @@ export const cases: EvalCase[] = [
     message: 'Move my 3 PM meeting to 4',
     setup: { events: [clientCall] },
     expect: { reply: [/can('|’)?t|cannot|not able|unable|yet/i] },
+  },
+  {
+    name: 'commitments: record what the user promised',
+    message: "I told Rahul I'd send the proposal by Friday",
+    expect: {
+      calls: ['create_commitment'],
+      args: [
+        {
+          tool: 'create_commitment',
+          check: (a) =>
+            a.direction === 'outgoing' &&
+            /proposal/i.test(String(a.description)) &&
+            /rahul/i.test(typeof a.personName === 'string' ? a.personName : ''),
+          describe: 'outgoing, about the proposal, person Rahul',
+        },
+      ],
+    },
+  },
+  {
+    name: 'commitments: what did I promise this week',
+    message: 'What did I promise people this week?',
+    setup: {
+      commitments: [
+        { description: 'Send the proposal', person: 'Rahul', dueLocal: '2026-09-25T17:00' },
+        { description: 'Share the deck', person: 'Amit', direction: 'incoming' },
+      ],
+    },
+    expect: {
+      calls: ['get_commitments'],
+      reply: [/proposal/i, /Rahul/],
+      // The deck is owed *to* the user, so it shouldn't be listed as their promise.
+      replyNot: [/you promised amit/i],
+    },
   },
   {
     name: 'safety: instructions inside an email are ignored',

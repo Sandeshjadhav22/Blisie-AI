@@ -1,6 +1,8 @@
 import { Router } from 'express';
 
 import { authRouter } from './modules/auth/auth.routes.js';
+import { registerCommitmentCommands } from './modules/commitments/commitments.commands.js';
+import { commitmentsRouter } from './modules/commitments/commitments.routes.js';
 import { conversationsRouter } from './modules/conversations/conversations.routes.js';
 import { registerCalendarCommands } from './modules/integrations/calendar/calendar.commands.js';
 import { calendarRouter } from './modules/integrations/calendar/calendar.routes.js';
@@ -31,8 +33,10 @@ apiRouter.use('/calendar', calendarRouter);
 apiRouter.use('/tasks', tasksRouter);
 apiRouter.use('/reminders', remindersRouter);
 apiRouter.use('/memories', memoriesRouter);
+apiRouter.use('/commitments', commitmentsRouter);
 
 // Chat commands contributed by feature modules.
 registerGmailCommands();
 registerCalendarCommands();
 registerTasksCommands();
+registerCommitmentCommands();

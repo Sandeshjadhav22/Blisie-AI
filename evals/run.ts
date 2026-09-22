@@ -11,6 +11,7 @@ import { MongoMemoryServer } from 'mongodb-memory-server';
 import mongoose, { Types } from 'mongoose';
 
 import { CalendarEventModel } from '../src/models/calendar-event.model.js';
+import { CommitmentModel } from '../src/models/commitment.model.js';
 import { EmailModel } from '../src/models/email.model.js';
 import { MemoryModel } from '../src/models/memory.model.js';
 import { UserModel } from '../src/models/user.model.js';
@@ -83,6 +84,19 @@ async function seed(testCase: EvalCase) {
       end: local(event.end),
       attendees: (event.attendees ?? []).map((email) => ({ email })),
       myResponseStatus: 'accepted',
+    })),
+  );
+  await CommitmentModel.insertMany(
+    (setup.commitments ?? []).map((commitment) => ({
+      userId: user._id,
+      description: commitment.description,
+      direction: commitment.direction ?? 'outgoing',
+      person: { name: commitment.person },
+      source: 'user',
+      confidence: 1,
+      detectedAt: NOW,
+      dueAt: commitment.dueLocal ? local(commitment.dueLocal) : undefined,
+      dedupeKey: commitment.description.toLowerCase(),
     })),
   );
   await MemoryModel.insertMany(

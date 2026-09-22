@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createApp } from '../src/app.js';
 import { enqueueEmailSync } from '../src/jobs/email-sync.js';
+import { CommitmentModel } from '../src/models/commitment.model.js';
 import { EmailModel } from '../src/models/email.model.js';
 import { IntegrationModel } from '../src/models/integration.model.js';
 import { UserModel } from '../src/models/user.model.js';
@@ -413,6 +414,16 @@ describe('Google integration', () => {
     await agent.get('/api/v1/auth/google/callback').query({ code: 'c', state });
 
     const [user] = await UserModel.find();
+    await CommitmentModel.create({
+      userId: user?._id,
+      description: 'Send the proposal',
+      source: 'gmail',
+      sourceId: 'm1',
+      excerpt: "I'll send the proposal Friday",
+      confidence: 0.9,
+      detectedAt: new Date(),
+      dedupeKey: 'send the proposal',
+    });
     await EmailModel.create({
       userId: user?._id,
       gmailId: 'm1',
@@ -426,6 +437,10 @@ describe('Google integration', () => {
     expect(await IntegrationModel.countDocuments()).toBe(0);
     // Synced mail doesn't outlive the connection.
     expect(await EmailModel.countDocuments()).toBe(0);
+    // The promise is kept, but the quoted email text is removed with it.
+    const kept = await CommitmentModel.findOne().lean();
+    expect(kept).toMatchObject({ description: 'Send the proposal' });
+    expect(kept?.excerpt).toBeUndefined();
     // Tasks-only connections don't trigger an email sync.
     expect(enqueueEmailSync).not.toHaveBeenCalled();
 

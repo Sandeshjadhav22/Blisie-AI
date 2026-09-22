@@ -12,12 +12,13 @@ const HELP_TEXT = [
   "Hi! I'm your assistant. Just ask me things in plain words, like:",
   '',
   "- What's important today?",
+  '- What did I promise people this week?',
   '- What meetings do I have tomorrow?',
   '- Did Rahul email me?',
   '- Remind me to call Rahul at 6',
   '- Remember that Rahul is our designer',
   '',
-  'Shortcuts: /today · /free · /inbox · /tasks · /help',
+  'Shortcuts: /today · /free · /inbox · /tasks · /promises · /help',
 ].join('\n');
 
 const commands = new Map<string, CommandHandler>([

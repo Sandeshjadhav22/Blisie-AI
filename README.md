@@ -60,6 +60,20 @@ responder handles slash commands and echoes everything else until the agent arri
 - Disconnecting Google deletes all synced email.
 - In Telegram, `/inbox` lists today's email (in the user's timezone).
 
+## Commitments
+
+The promises people make: "I'll send the proposal by Friday".
+
+- The **worker** reads new email and chat messages every 15 minutes and records what it finds:
+  who owes what to whom, the deadline, a confidence score and the sentence it came from.
+  Each item is read once (a `commitmentScannedAt` marker), batched into few model calls, and
+  capped per sweep, so the cost stays predictable.
+- Commitments are deduplicated per source message, so re-scanning can't create copies.
+- The worker **nudges** on Telegram when something is nearly due or overdue, once per promise.
+- In chat: `/promises`, or just ask ("what did I promise people this week?", "what am I
+  forgetting?"). The agent can also record, complete and drop promises.
+- Disconnecting Google keeps the promises but deletes the quoted email text.
+
 ## The agent
 
 Plain messages go to the agent (`src/modules/agent`); slash commands skip it.
@@ -167,6 +181,9 @@ model change; `pnpm eval reminder` runs a subset.
 | `POST /reminders`                                                                 | ✓      | Create (`text`, `dueAt` ISO) — delivered on Telegram        |
 | `DELETE /reminders/:id`                                                           | ✓      | Cancel a pending reminder                                   |
 | `GET /memories`, `POST /memories`, `PATCH /memories/:id`, `DELETE /memories/:id`  | ✓      | Remembered facts                                            |
+| `GET /commitments?status=&direction=&person=&dueWithinDays=&sinceDays=`           | ✓      | Promises                                                    |
+| `POST /commitments`                                                               | ✓      | Record one by hand                                          |
+| `PATCH /commitments/:id`                                                          | ✓      | Complete, cancel or edit                                    |
 
 OAuth redirects report problems back to the frontend as `?error=<code>` (see `AuthErrorCode`).
 

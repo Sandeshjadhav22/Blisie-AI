@@ -25,6 +25,8 @@ const emailSchema = new Schema(
     isImportant: { type: Boolean, default: false },
     isInbox: { type: Boolean, default: false },
     isSent: { type: Boolean, default: false },
+    /** When the commitment detector last looked at this email (null = not yet). */
+    commitmentScannedAt: { type: Date },
   },
   { timestamps: true },
 );
@@ -32,6 +34,7 @@ const emailSchema = new Schema(
 emailSchema.index({ userId: 1, gmailId: 1 }, { unique: true });
 emailSchema.index({ userId: 1, receivedAt: -1 });
 emailSchema.index({ userId: 1, threadId: 1 });
+emailSchema.index({ userId: 1, commitmentScannedAt: 1, receivedAt: -1 });
 emailSchema.index(
   { subject: 'text', snippet: 'text', 'from.name': 'text', 'from.email': 'text' },
   { weights: { subject: 5, 'from.name': 3, 'from.email': 3, snippet: 1 }, name: 'email_text' },
