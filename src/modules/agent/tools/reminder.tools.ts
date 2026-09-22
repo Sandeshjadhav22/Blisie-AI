@@ -25,12 +25,12 @@ export const createReminderTool = defineTool({
       .regex(LOCAL_DATE_TIME)
       .describe("When, in the user's timezone: YYYY-MM-DDTHH:mm (24-hour)."),
   }),
-  async execute({ user }, { text, localDateTime }) {
-    const reminder = await createReminder(user._id, {
-      text,
-      dueAt: localDateTimeToUtc(localDateTime, user.timezone),
-      source: 'agent',
-    });
+  async execute({ user, now }, { text, localDateTime }) {
+    const reminder = await createReminder(
+      user._id,
+      { text, dueAt: localDateTimeToUtc(localDateTime, user.timezone), source: 'agent' },
+      now,
+    );
     return {
       id: reminder.id,
       text: reminder.text,

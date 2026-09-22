@@ -23,8 +23,10 @@ export async function scheduleReminder(reminder: ReminderDocument): Promise<void
 export async function createReminder(
   userId: Types.ObjectId,
   input: { text: string; dueAt: Date; source: 'agent' | 'api' },
+  /** The clock to judge "past" by — the agent passes the turn's time. */
+  clock: Date = new Date(),
 ): Promise<ReminderDocument> {
-  const now = Date.now();
+  const now = clock.getTime();
   if (input.dueAt.getTime() < now - PAST_GRACE_MS) {
     throw new BadRequestError('That time has already passed');
   }
