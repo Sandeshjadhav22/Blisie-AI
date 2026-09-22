@@ -70,8 +70,8 @@ message → context (memories, connected services, last 16 turns)
         → reply (light Markdown, rendered to Telegram HTML by the adapter)
 ```
 
-- **LLM interface** (`agent/llm/types.ts`) is provider-agnostic. `GeminiProvider` is the first
-  implementation. Model turns are replayed verbatim during tool calling, because Gemini's thought
+- **LLM interface** (`agent/llm/types.ts`) is provider-agnostic. `GeminiProvider` (default model
+  `gemini-3.5-flash-lite`) is the first implementation. Model turns are replayed verbatim during tool calling, because Gemini's thought
   signatures must be sent back unchanged. To swap models, add a provider.
 - **Tools** (`agent/tools/`): calendar events, free time, email search/read, tasks, reminders
   (create/list/cancel) and memory (save/search/update/forget). Each declares a risk level. Only

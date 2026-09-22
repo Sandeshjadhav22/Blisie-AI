@@ -55,7 +55,7 @@ const envSchema = z.object({
   // The agent. The provider sits behind an interface (modules/agent/llm) so it can be swapped.
   // Without an API key, plain messages get a "not configured" reply; slash commands still work.
   LLM_PROVIDER: z.enum(['gemini']).default('gemini'),
-  LLM_MODEL: z.string().default('gemini-3.8-flash'),
+  LLM_MODEL: z.string().default('gemini-3.5-flash-lite'),
   LLM_API_KEY: z.string().optional(),
 });
 
