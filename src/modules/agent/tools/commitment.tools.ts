@@ -89,6 +89,10 @@ export const createCommitment = defineTool({
       .optional()
       .describe('What they said, e.g. "Friday", if there is no exact time.'),
   }),
+  describe: (args) =>
+    args.direction === 'outgoing'
+      ? `Track your promise: ${args.description}${args.personName ? ` (to ${args.personName})` : ''}`
+      : `Track ${args.personName ?? 'their'} promise to you: ${args.description}`,
   async execute({ user, now }, args) {
     const commitment = await recordCommitment(user._id, {
       description: args.description,
@@ -117,6 +121,7 @@ export const completeCommitment = defineTool({
     "Marks a promise as done when the user says they've handled it. Get ids from get_commitments.",
   risk: 'WRITE',
   schema: z.object({ id: z.string() }),
+  describe: () => 'Mark a promise as done',
   async execute({ user, now }, { id }) {
     const commitment = await setCommitmentStatus(user._id, id, 'completed', now);
     return { done: commitment.description };
@@ -128,6 +133,7 @@ export const cancelCommitment = defineTool({
   description: 'Drops a promise that no longer applies, or that was detected wrongly.',
   risk: 'WRITE',
   schema: z.object({ id: z.string() }),
+  describe: () => 'Drop a promise',
   async execute({ user, now }, { id }) {
     const commitment = await setCommitmentStatus(user._id, id, 'cancelled', now);
     return { cancelled: commitment.description };

@@ -24,6 +24,7 @@ export const QUEUE_NAMES = {
   reminders: 'reminders',
   dailyBriefing: 'daily-briefing',
   followUpDetection: 'follow-up-detection',
+  emailTriage: 'email-triage',
   tokenRefresh: 'token-refresh',
 } as const;
 
@@ -48,6 +49,13 @@ export const REMINDER_JOBS = {
   send: 'send',
   /** Scheduled safety net: re-queues overdue pending reminders (e.g. if Redis lost a job). */
   sweep: 'sweep',
+} as const;
+
+/** Job names on the daily-briefing queue. Duplicated in the worker — change both together. */
+export const BRIEFING_JOBS = {
+  dispatch: 'dispatch',
+  /** One user's briefing; `manual: true` for one they asked for. */
+  send: 'send',
 } as const;
 
 /** BullMQ custom job ids can't contain ':'. */

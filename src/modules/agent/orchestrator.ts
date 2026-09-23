@@ -4,7 +4,7 @@ import type { UserDocument } from '../../models/user.model.js';
 import { summarizeError } from '../../utils/error-summary.js';
 import { logger } from '../../utils/logger.js';
 import { loadContext } from './context.js';
-import { executeToolCall } from './executor.js';
+import { executeToolCall, type PendingApproval } from './executor.js';
 import { getLlmProvider } from './llm/index.js';
 import { type AgentMessage, LlmError, type LlmProvider, type LlmUsage } from './llm/types.js';
 import { buildSystemPrompt } from './prompts/system.js';
@@ -16,8 +16,9 @@ import { type AgentTool, toToolSpec } from './tools/types.js';
  *
  *   message → context retrieval → LLM reasoning ⇄ tool calls (validated, executed by us) → reply
  *
- * The LLM only ever *proposes* tool calls; this code decides whether and how they run. That's the
- * seam Phase 9's permission checks slot into.
+ * The LLM only ever *proposes* tool calls; this code decides whether and how they run. The
+ * executor applies the permission policy: calls that need the user's OK come back as pending
+ * approvals, which the channel shows with Yes / No buttons after the reply.
  */
 
 const MAX_STEPS = 6;
@@ -38,6 +39,8 @@ export interface AgentRunInput {
 export interface AgentRunResult {
   reply: string;
   toolCalls: { name: string; args: Record<string, unknown>; ok: boolean }[];
+  /** Calls waiting for the user's approval, in the order the model made them. */
+  pendingApprovals: PendingApproval[];
   steps: number;
   usage: LlmUsage;
   model?: string;
@@ -61,8 +64,11 @@ function failureReply(error: unknown): string {
 export async function runAgent(input: AgentRunInput): Promise<AgentRunResult> {
   const provider = input.provider === undefined ? getLlmProvider() : input.provider;
   const toolCalls: AgentRunResult['toolCalls'] = [];
+  const pendingApprovals: PendingApproval[] = [];
   const usage: LlmUsage = { inputTokens: 0, outputTokens: 0 };
-  if (!provider) return { reply: NOT_CONFIGURED_REPLY, toolCalls, steps: 0, usage };
+  if (!provider) {
+    return { reply: NOT_CONFIGURED_REPLY, toolCalls, pendingApprovals, steps: 0, usage };
+  }
 
   const now = input.now ?? new Date();
   const tools = input.tools ?? defaultTools;
@@ -86,7 +92,14 @@ export async function runAgent(input: AgentRunInput): Promise<AgentRunResult> {
         { userId: input.user.id, step, error: summarizeError(error) },
         'LLM request failed',
       );
-      return { reply: failureReply(error), toolCalls, steps: step, usage, model: provider.model };
+      return {
+        reply: failureReply(error),
+        toolCalls,
+        pendingApprovals,
+        steps: step,
+        usage,
+        model: provider.model,
+      };
     }
     usage.inputTokens = (usage.inputTokens ?? 0) + (response.usage?.inputTokens ?? 0);
     usage.outputTokens = (usage.outputTokens ?? 0) + (response.usage?.outputTokens ?? 0);
@@ -95,6 +108,7 @@ export async function runAgent(input: AgentRunInput): Promise<AgentRunResult> {
       return {
         reply: response.text ?? "Sorry, I didn't catch that. Could you rephrase?",
         toolCalls,
+        pendingApprovals,
         steps: step,
         usage,
         model: provider.model,
@@ -103,9 +117,13 @@ export async function runAgent(input: AgentRunInput): Promise<AgentRunResult> {
 
     const calls = response.toolCalls.slice(0, MAX_CALLS_PER_STEP);
     messages.push({ role: 'assistant', text: response.text, toolCalls: calls, raw: response.raw });
-    const results = await Promise.all(
+    const executed = await Promise.all(
       calls.map((call) => executeToolCall(tools, toolContext, call)),
     );
+    const results = executed.map((item) => item.result);
+    for (const item of executed) {
+      if (item.pendingApproval) pendingApprovals.push(item.pendingApproval);
+    }
     results.forEach((result, index) => {
       toolCalls.push({
         name: result.name,
@@ -120,6 +138,7 @@ export async function runAgent(input: AgentRunInput): Promise<AgentRunResult> {
   return {
     reply: "That took more steps than I'm allowed. Could you break it into a smaller question?",
     toolCalls,
+    pendingApprovals,
     steps: MAX_STEPS,
     usage,
     model: provider.model,

@@ -22,7 +22,7 @@ conversationsRouter.get('/', async (req, res) => {
   res.json({ conversations: conversations.map(toPublicConversation) });
 });
 
-const messagesQuerySchema = z.object({
+export const messagesQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
   before: z.iso.datetime().optional(),
 });

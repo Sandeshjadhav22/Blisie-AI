@@ -10,9 +10,9 @@ export const tasksRouter = Router();
 tasksRouter.use(requireAuth);
 
 const dueDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: 'must be YYYY-MM-DD' });
-const taskIdSchema = z.object({ id: z.string().regex(/^[A-Za-z0-9_-]{1,256}$/) });
+export const taskIdSchema = z.object({ id: z.string().regex(/^[A-Za-z0-9_-]{1,256}$/) });
 
-const listQuerySchema = z.object({
+export const listQuerySchema = z.object({
   includeCompleted: z
     .enum(['true', 'false'])
     .transform((value) => value === 'true')
@@ -24,7 +24,7 @@ tasksRouter.get('/', validate({ query: listQuerySchema }), async (req, res) => {
   res.json({ tasks: await listTasks(getAuthUser(req)._id, { includeCompleted }) });
 });
 
-const createSchema = z
+export const createSchema = z
   .object({
     title: z.string().trim().min(1).max(1024),
     notes: z.string().max(8192).optional(),
@@ -37,7 +37,7 @@ tasksRouter.post('/', validate({ body: createSchema }), async (req, res) => {
   res.status(201).json({ task: await createTask(getAuthUser(req)._id, input) });
 });
 
-const updateSchema = z
+export const updateSchema = z
   .object({
     title: z.string().trim().min(1).max(1024).optional(),
     notes: z.string().max(8192).optional(),

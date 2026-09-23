@@ -22,6 +22,7 @@ export const saveMemoryTool = defineTool({
       .describe('The fact, as a short standalone sentence.'),
     subject: z.string().trim().max(100).optional().describe("Who/what it's about, e.g. 'Rahul'."),
   }),
+  describe: ({ content }) => `Remember: ${content}`,
   async execute({ user }, { content, subject }) {
     const memory = await saveMemory(user._id, { content, subject, source: 'user' });
     return { id: memory.id, saved: memory.content };
@@ -51,6 +52,7 @@ export const updateMemoryTool = defineTool({
     content: z.string().trim().min(1).max(1000),
     subject: z.string().trim().max(100).optional(),
   }),
+  describe: ({ content }) => `Update a remembered fact to: ${content}`,
   async execute({ user }, { id, content, subject }) {
     const memory = await updateMemory(user._id, id, { content, subject });
     return { id: memory.id, saved: memory.content };
@@ -62,6 +64,7 @@ export const forgetMemoryTool = defineTool({
   description: 'Deletes a remembered fact by id when the user asks you to forget it.',
   risk: 'WRITE',
   schema: z.object({ id: z.string() }),
+  describe: () => 'Forget a remembered fact',
   async execute({ user }, { id }) {
     await deleteMemory(user._id, id);
     return { forgotten: true };

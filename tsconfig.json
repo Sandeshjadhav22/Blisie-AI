@@ -20,5 +20,5 @@
     "resolveJsonModule": true,
     "sourceMap": true
   },
-  "include": ["src", "tests", "evals", "vitest.config.ts"]
+  "include": ["src", "tests", "evals", "scripts", "vitest.config.ts"]
 }

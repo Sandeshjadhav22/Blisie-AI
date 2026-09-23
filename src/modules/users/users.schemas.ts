@@ -1,5 +1,6 @@
 import { z } from 'zod';
 
+import { PERMISSION_MODES } from '../../models/user.model.js';
 import { isValidTimezone } from '../../utils/time.js';
 
 const timeOfDay = z
@@ -19,6 +20,8 @@ export const updateMeSchema = z
         dailyBriefingTime: timeOfDay.optional(),
         workingHoursStart: timeOfDay.optional(),
         workingHoursEnd: timeOfDay.optional(),
+        importantEmailAlerts: z.boolean().optional(),
+        followUpNudges: z.boolean().optional(),
       })
       .strict()
       .refine(
@@ -28,6 +31,16 @@ export const updateMeSchema = z
           prefs.workingHoursStart < prefs.workingHoursEnd,
         { message: 'working hours must end after they start', path: ['workingHoursEnd'] },
       )
+      .optional(),
+    /** What the agent may do without asking, per risk level (see actions/policy.ts). */
+    permissions: z
+      .object({
+        write: z.enum(PERMISSION_MODES).optional(),
+        externalAction: z.enum(PERMISSION_MODES).optional(),
+        // Actions that can't be undone always ask first; they can only be turned off.
+        destructive: z.enum(['confirm', 'never']).optional(),
+      })
+      .strict()
       .optional(),
     onboardingCompleted: z.literal(true).optional(),
   })

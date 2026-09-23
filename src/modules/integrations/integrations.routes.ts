@@ -15,7 +15,7 @@ import { disconnectGoogle, listIntegrations, toPublicIntegration } from './integ
 
 export const integrationsRouter = Router();
 
-const connectQuerySchema = z.object({
+export const connectQuerySchema = z.object({
   // Comma-separated, e.g. `gmail,calendar`.
   features: z
     .string()

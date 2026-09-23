@@ -1,49 +1,96 @@
-import { AppError } from '../../utils/errors.js';
-import { summarizeError } from '../../utils/error-summary.js';
-import { logger } from '../../utils/logger.js';
+import { createPendingAction, recordAction } from '../actions/actions.service.js';
+import { decide, RISK_LABELS } from '../actions/policy.js';
 import type { ToolCall, ToolResult } from './llm/types.js';
-import { type AgentTool, type ToolContext, ToolError } from './tools/types.js';
+import { runTool } from './tools/run.js';
+import { type AgentTool, describeCall, riskOf, type ToolContext } from './tools/types.js';
 
-/** Keep tool output small: it's sent to the model on every following step. */
-const MAX_OUTPUT_CHARS = 12_000;
+/** A call stored for the user to approve; the channel shows it with Yes / No buttons. */
+export interface PendingApproval {
+  actionId: string;
+  summary: string;
+}
 
-function truncate(output: unknown): unknown {
-  const json = JSON.stringify(output);
-  if (json.length <= MAX_OUTPUT_CHARS) return output;
-  return { truncated: true, partial: json.slice(0, MAX_OUTPUT_CHARS) };
+export interface ExecutedCall {
+  result: ToolResult;
+  pendingApproval?: PendingApproval;
 }
 
 /**
  * Runs one tool call: finds the tool, validates the model's arguments against the tool's schema,
- * and turns failures into error messages the model can act on instead of exceptions.
+ * then applies the permission policy. READ calls just run. Anything else runs, waits for the
+ * user's approval, or is refused, depending on its risk and the user's settings — and is written
+ * to the audit log either way. Failures become messages the model can act on, not exceptions.
  */
 export async function executeToolCall(
   tools: AgentTool[],
   context: ToolContext,
   call: ToolCall,
-): Promise<ToolResult> {
+): Promise<ExecutedCall> {
   const base = { callId: call.id, name: call.name };
   const tool = tools.find((candidate) => candidate.name === call.name);
-  if (!tool) return { ...base, error: `Unknown tool "${call.name}"` };
+  if (!tool) return { result: { ...base, error: `Unknown tool "${call.name}"` } };
 
   const parsed = tool.schema.safeParse(call.args);
   if (!parsed.success) {
     const issues = parsed.error.issues
       .map((issue) => `${issue.path.join('.') || 'arguments'}: ${issue.message}`)
       .join('; ');
-    return { ...base, error: `Invalid arguments — ${issues}` };
+    return { result: { ...base, error: `Invalid arguments — ${issues}` } };
   }
 
-  try {
-    return { ...base, output: truncate(await tool.execute(context, parsed.data)) };
-  } catch (error) {
-    if (error instanceof ToolError || error instanceof AppError) {
-      return { ...base, error: error.message };
-    }
-    logger.error(
-      { tool: call.name, userId: context.user.id, error: summarizeError(error) },
-      'Agent tool failed',
-    );
-    return { ...base, error: 'The tool failed unexpectedly. Tell the user to try again shortly.' };
+  const risk = await riskOf(tool, parsed.data, context);
+  const decision = decide(risk, context.user);
+
+  if (risk === 'READ') {
+    const outcome = await runTool(tool, context, parsed.data);
+    return {
+      result: outcome.ok ? { ...base, output: outcome.output } : { ...base, error: outcome.error },
+    };
   }
+
+  const action = {
+    userId: context.user._id,
+    conversationId: context.conversationId,
+    tool: tool.name,
+    risk,
+    args: parsed.data,
+    summary: (await describeCall(tool, parsed.data, context)).slice(0, 4000),
+  };
+
+  if (decision === 'deny') {
+    await recordAction(action, { status: 'blocked' }, context.now);
+    return {
+      result: {
+        ...base,
+        error: `Not allowed: the user has turned off ${RISK_LABELS[risk]} in Settings → Permissions. Tell them, and don't try another way around it.`,
+      },
+    };
+  }
+
+  if (decision === 'confirm') {
+    const pending = await createPendingAction(action, context.now);
+    return {
+      result: {
+        ...base,
+        output: {
+          status: 'awaiting_approval',
+          summary: action.summary,
+          note: 'Nothing has happened yet. The user has been shown this with Yes / No buttons and it runs only if they tap Yes. Tell them in one line what you prepared and that it needs their OK. Do not say it is done.',
+        },
+      },
+      pendingApproval: { actionId: pending.id, summary: action.summary },
+    };
+  }
+
+  const outcome = await runTool(tool, context, parsed.data);
+  await recordAction(
+    action,
+    outcome.ok
+      ? { status: 'executed', result: outcome.output }
+      : { status: 'failed', error: outcome.error },
+    context.now,
+  );
+  return {
+    result: outcome.ok ? { ...base, output: outcome.output } : { ...base, error: outcome.error },
+  };
 }

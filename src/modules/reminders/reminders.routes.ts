@@ -14,7 +14,7 @@ export const remindersRouter = Router();
 
 remindersRouter.use(requireAuth);
 
-const listSchema = z.object({ status: z.enum(['pending', 'all']).default('pending') });
+export const listSchema = z.object({ status: z.enum(['pending', 'all']).default('pending') });
 
 remindersRouter.get('/', validate({ query: listSchema }), async (req, res) => {
   const { status } = res.locals.validated?.query as z.infer<typeof listSchema>;
@@ -22,7 +22,7 @@ remindersRouter.get('/', validate({ query: listSchema }), async (req, res) => {
   res.json({ reminders: reminders.map(toPublicReminder) });
 });
 
-const createSchema = z
+export const createSchema = z
   .object({
     text: z.string().trim().min(1).max(500),
     dueAt: z.iso.datetime({ offset: true }).transform((value) => new Date(value)),

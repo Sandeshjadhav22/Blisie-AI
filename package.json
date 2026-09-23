@@ -20,7 +20,8 @@
     "test:watch": "vitest",
     "redis:up": "docker compose up -d redis",
     "redis:down": "docker compose down",
-    "eval": "tsx --env-file-if-exists=.env evals/run.ts"
+    "eval": "tsx --env-file-if-exists=.env evals/run.ts",
+    "openapi": "tsx --env-file-if-exists=.env scripts/openapi.ts"
   },
   "dependencies": {
     "@google/genai": "^2.23.0",

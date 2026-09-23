@@ -5,11 +5,17 @@ import type { UserDocument } from '../../../models/user.model.js';
 import type { JsonSchema, ToolSpec } from '../llm/types.js';
 
 /**
- * Risk levels every tool declares. Phase 9's permission engine decides from these whether a call
- * runs straight away or needs the user's confirmation; until then only READ and low-risk WRITE
- * tools are exposed.
+ * Risk levels every tool declares. The permission policy (modules/actions/policy.ts) decides from
+ * these, and the user's settings, whether a call runs straight away, waits for the user to approve
+ * it on Telegram, or is refused:
+ *
+ * - READ: looks things up. Always runs.
+ * - WRITE: changes the user's own data (a reminder, a task, a draft).
+ * - EXTERNAL_ACTION: reaches other people (sends email, invites guests, moves a shared meeting).
+ * - DESTRUCTIVE: can't be undone (cancelling a meeting). Always needs approval.
  */
-export type ToolRisk = 'READ' | 'WRITE' | 'EXTERNAL_ACTION' | 'DESTRUCTIVE';
+export const TOOL_RISKS = ['READ', 'WRITE', 'EXTERNAL_ACTION', 'DESTRUCTIVE'] as const;
+export type ToolRisk = (typeof TOOL_RISKS)[number];
 
 export interface ToolContext {
   user: UserDocument;
@@ -20,13 +26,35 @@ export interface ToolContext {
 export interface AgentTool<S extends z.ZodType = z.ZodType> {
   name: string;
   description: string;
-  risk: ToolRisk;
+  /** Fixed, or worked out from the call (e.g. an event with guests reaches other people). */
+  risk: ToolRisk | ((args: z.infer<S>, context: ToolContext) => ToolRisk | Promise<ToolRisk>);
   schema: S;
+  /**
+   * One plain line saying what this call will do ("Send an email to Rahul: …"). Shown when asking
+   * the user to approve it and in the activity log. Required for anything that isn't READ.
+   */
+  describe?: (args: z.infer<S>, context: ToolContext) => string | Promise<string>;
   execute(context: ToolContext, args: z.infer<S>): Promise<unknown>;
 }
 
 export function defineTool<S extends z.ZodType>(tool: AgentTool<S>): AgentTool {
   return tool;
+}
+
+export async function riskOf(
+  tool: AgentTool,
+  args: unknown,
+  context: ToolContext,
+): Promise<ToolRisk> {
+  return typeof tool.risk === 'function' ? tool.risk(args, context) : tool.risk;
+}
+
+export async function describeCall(
+  tool: AgentTool,
+  args: unknown,
+  context: ToolContext,
+): Promise<string> {
+  return tool.describe ? tool.describe(args, context) : tool.name.replace(/_/g, ' ');
 }
 
 /** An error whose message is meant for the model to relay (e.g. "Calendar isn't connected"). */

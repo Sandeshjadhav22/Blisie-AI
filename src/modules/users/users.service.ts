@@ -1,4 +1,4 @@
-import { type UserDocument, UserModel } from '../../models/user.model.js';
+import { type PermissionMode, type UserDocument, UserModel } from '../../models/user.model.js';
 import type { GoogleProfile } from '../integrations/google/google-oauth.js';
 import { ValidationError } from '../../utils/errors.js';
 import type { UpdateMeInput } from './users.schemas.js';
@@ -16,6 +16,13 @@ export interface PublicUser {
     dailyBriefingTime: string;
     workingHoursStart: string;
     workingHoursEnd: string;
+    importantEmailAlerts: boolean;
+    followUpNudges: boolean;
+  };
+  permissions: {
+    write: PermissionMode;
+    externalAction: PermissionMode;
+    destructive: 'confirm' | 'never';
   };
   onboardingCompleted: boolean;
   createdAt: string;
@@ -35,6 +42,13 @@ export function toPublicUser(user: UserDocument): PublicUser {
       dailyBriefingTime: user.preferences.dailyBriefingTime,
       workingHoursStart: user.preferences.workingHoursStart,
       workingHoursEnd: user.preferences.workingHoursEnd,
+      importantEmailAlerts: user.preferences.importantEmailAlerts,
+      followUpNudges: user.preferences.followUpNudges,
+    },
+    permissions: {
+      write: user.permissions.write,
+      externalAction: user.permissions.externalAction,
+      destructive: user.permissions.destructive,
     },
     onboardingCompleted: Boolean(user.onboardingCompletedAt),
     createdAt: user.createdAt.toISOString(),
@@ -74,12 +88,17 @@ export async function upsertUserFromGoogle(
 export async function updateUser(user: UserDocument, input: UpdateMeInput): Promise<UserDocument> {
   if (input.name !== undefined) user.name = input.name;
   if (input.timezone !== undefined) user.timezone = input.timezone;
-  if (input.preferences?.dailyBriefingEnabled !== undefined) {
-    user.set('preferences.dailyBriefingEnabled', input.preferences.dailyBriefingEnabled);
+  for (const key of ['dailyBriefingEnabled', 'importantEmailAlerts', 'followUpNudges'] as const) {
+    const value = input.preferences?.[key];
+    if (value !== undefined) user.set(`preferences.${key}`, value);
   }
   for (const key of ['dailyBriefingTime', 'workingHoursStart', 'workingHoursEnd'] as const) {
     const value = input.preferences?.[key];
     if (value !== undefined) user.set(`preferences.${key}`, value);
+  }
+  for (const key of ['write', 'externalAction', 'destructive'] as const) {
+    const value = input.permissions?.[key];
+    if (value !== undefined) user.set(`permissions.${key}`, value);
   }
   // A partial update can still produce inverted hours (e.g. only moving the start later).
   if (user.preferences.workingHoursStart >= user.preferences.workingHoursEnd) {

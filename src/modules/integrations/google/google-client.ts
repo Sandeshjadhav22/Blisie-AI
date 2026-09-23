@@ -23,6 +23,7 @@ export class GoogleNotConnectedError extends AppError {
 
 const FEATURE_LABELS: Record<GoogleFeature, string> = {
   gmail: 'Gmail',
+  gmailSend: 'Sending email',
   calendar: 'Google Calendar',
   tasks: 'Google Tasks',
 };

@@ -3,9 +3,13 @@ import { IntegrationModel } from '../../src/models/integration.model.js';
 import { encrypt } from '../../src/utils/crypto.js';
 
 export const SCOPES = {
-  gmail: 'https://www.googleapis.com/auth/gmail.readonly',
-  calendar: 'https://www.googleapis.com/auth/calendar.events',
-  tasks: 'https://www.googleapis.com/auth/tasks',
+  gmail: ['https://www.googleapis.com/auth/gmail.readonly'],
+  gmailSend: [
+    'https://www.googleapis.com/auth/gmail.compose',
+    'https://www.googleapis.com/auth/gmail.send',
+  ],
+  calendar: ['https://www.googleapis.com/auth/calendar.events'],
+  tasks: ['https://www.googleapis.com/auth/tasks'],
 };
 
 /** Stores a working Google connection with the given features for `user`. */
@@ -18,7 +22,7 @@ export async function connectGoogle(
     userId: user._id,
     provider: 'google',
     providerAccountId: user.googleId ?? 'google-sub',
-    scopes: ['openid', 'email', ...features.map((feature) => SCOPES[feature])],
+    scopes: ['openid', 'email', ...features.flatMap((feature) => SCOPES[feature])],
     accessToken: encrypt('access'),
     refreshToken: encrypt('refresh'),
     expiresAt: new Date(Date.now() + 3600_000),

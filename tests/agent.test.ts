@@ -138,9 +138,9 @@ describe('runAgent', () => {
 
   it('reports unknown tools back to the model', async () => {
     const { user, conversationId } = await setup();
-    const llm = new ScriptedLlm([call('send_email', { to: 'x' }), say("I can't send email yet.")]);
-    await runAgent({ user, conversationId, text: 'email Rahul', now: NOW, provider: llm });
-    expect(toolResults(llm, 1)[0]?.error).toBe('Unknown tool "send_email"');
+    const llm = new ScriptedLlm([call('wire_money', { to: 'x' }), say("I can't do that.")]);
+    await runAgent({ user, conversationId, text: 'pay Rahul', now: NOW, provider: llm });
+    expect(toolResults(llm, 1)[0]?.error).toBe('Unknown tool "wire_money"');
   });
 
   it('relays a clear message when a service is not connected', async () => {
@@ -261,8 +261,10 @@ describe('tool specs', () => {
     }
   });
 
-  it('only exposes tools that are safe without confirmation', () => {
-    expect(defaultTools.every((tool) => tool.risk === 'READ' || tool.risk === 'WRITE')).toBe(true);
+  it('describes every tool that changes anything, for the approval message and audit log', () => {
+    for (const tool of defaultTools) {
+      if (tool.risk !== 'READ') expect(tool.describe, tool.name).toBeTypeOf('function');
+    }
   });
 });
 

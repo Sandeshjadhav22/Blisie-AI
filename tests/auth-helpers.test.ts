@@ -68,6 +68,7 @@ describe('Google scopes', () => {
   it('maps granted scopes to features', () => {
     expect(featuresFromScopes(['https://www.googleapis.com/auth/calendar.events'])).toEqual({
       gmail: false,
+      gmailSend: false,
       calendar: true,
       tasks: false,
     });

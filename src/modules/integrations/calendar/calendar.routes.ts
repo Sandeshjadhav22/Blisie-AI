@@ -26,9 +26,9 @@ const dateString = z
 const booleanParam = z.enum(['true', 'false']).transform((value) => value === 'true');
 const isoDateTime = z.iso.datetime({ offset: true }).transform((value) => new Date(value));
 // Google event IDs, including recurring-instance IDs like `abc123_20260922T100000Z`.
-const eventIdSchema = z.object({ id: z.string().regex(/^[A-Za-z0-9_-]{1,1024}$/) });
+export const eventIdSchema = z.object({ id: z.string().regex(/^[A-Za-z0-9_-]{1,1024}$/) });
 
-const eventsQuerySchema = z.object({
+export const eventsQuerySchema = z.object({
   /** Local date in the user's timezone; defaults to today. */
   date: dateString.optional(),
   days: z.coerce.number().int().min(1).max(31).default(1),
@@ -52,7 +52,7 @@ calendarRouter.get('/events', validate({ query: eventsQuerySchema }), async (req
   });
 });
 
-const availabilityQuerySchema = z.object({
+export const availabilityQuerySchema = z.object({
   date: dateString.optional(),
   days: z.coerce.number().int().min(1).max(14).default(1),
   duration: z.coerce.number().int().min(15).max(480).default(30),
@@ -86,7 +86,7 @@ calendarRouter.get(
   },
 );
 
-const createEventSchema = z
+export const createEventSchema = z
   .object({
     summary: z.string().trim().min(1).max(500),
     start: isoDateTime,
@@ -103,7 +103,7 @@ calendarRouter.post('/events', validate({ body: createEventSchema }), async (req
   res.status(201).json({ event: event ? toPublicEvent(event) : null });
 });
 
-const updateEventSchema = z
+export const updateEventSchema = z
   .object({
     summary: z.string().trim().min(1).max(500).optional(),
     start: isoDateTime.optional(),

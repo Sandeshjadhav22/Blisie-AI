@@ -5,8 +5,12 @@
 export const LOGIN_SCOPES = ['openid', 'email', 'profile'];
 
 export const GOOGLE_FEATURE_SCOPES = {
-  // Phase 4 adds gmail.compose (drafts) and gmail.send once those actions exist.
   gmail: ['https://www.googleapis.com/auth/gmail.readonly'],
+  // Separate from reading, so connecting Gmail never implies letting the assistant send mail.
+  gmailSend: [
+    'https://www.googleapis.com/auth/gmail.compose',
+    'https://www.googleapis.com/auth/gmail.send',
+  ],
   calendar: ['https://www.googleapis.com/auth/calendar.events'],
   tasks: ['https://www.googleapis.com/auth/tasks'],
 } as const;

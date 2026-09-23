@@ -3,6 +3,7 @@ import type { Types } from 'mongoose';
 import { CalendarEventModel } from '../../models/calendar-event.model.js';
 import { CommitmentModel } from '../../models/commitment.model.js';
 import { EmailModel } from '../../models/email.model.js';
+import { FollowUpModel } from '../../models/follow-up.model.js';
 import {
   type IntegrationDocument,
   IntegrationModel,
@@ -109,6 +110,7 @@ export async function disconnectGoogle(userId: Types.ObjectId): Promise<boolean>
     integration.deleteOne(),
     EmailModel.deleteMany({ userId }),
     CalendarEventModel.deleteMany({ userId }),
+    FollowUpModel.deleteMany({ userId }),
     CommitmentModel.updateMany({ userId, source: 'gmail' }, { $unset: { excerpt: 1 } }),
   ]);
   return true;

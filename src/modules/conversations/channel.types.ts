@@ -30,4 +30,11 @@ export interface OutgoingMessage {
   format?: 'plain' | 'html' | 'markdown';
   /** Stored with the message (e.g. which tools the agent used). Not shown to the user. */
   metadata?: Record<string, unknown>;
+  /**
+   * Buttons under the message, as rows. `data` comes back to the adapter when tapped (Telegram
+   * callback data: at most 64 bytes).
+   */
+  buttons?: { text: string; data: string }[][];
+  /** Set on an approval request, so the adapter can remember which message carries it. */
+  actionId?: string;
 }

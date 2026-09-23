@@ -15,7 +15,7 @@ export const memoriesRouter = Router();
 
 memoriesRouter.use(requireAuth);
 
-const memorySchema = z
+export const memorySchema = z
   .object({
     content: z.string().trim().min(1).max(1000),
     subject: z.string().trim().min(1).max(100).optional(),

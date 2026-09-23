@@ -354,7 +354,7 @@ describe('Google integration', () => {
         provider: 'google',
         status: 'active',
         email: profile.email,
-        features: { gmail: true, calendar: false, tasks: false },
+        features: { gmail: true, gmailSend: false, calendar: false, tasks: false },
       }),
     ]);
     expect(JSON.stringify(list.body)).not.toContain('gmail-refresh');

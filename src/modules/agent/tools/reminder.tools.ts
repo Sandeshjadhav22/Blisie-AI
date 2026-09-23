@@ -25,6 +25,8 @@ export const createReminderTool = defineTool({
       .regex(LOCAL_DATE_TIME)
       .describe("When, in the user's timezone: YYYY-MM-DDTHH:mm (24-hour)."),
   }),
+  describe: ({ text, localDateTime }, { user }) =>
+    `Remind you to “${text}” on ${formatLocal(localDateTimeToUtc(localDateTime, user.timezone), user.timezone)}`,
   async execute({ user, now }, { text, localDateTime }) {
     const reminder = await createReminder(
       user._id,
@@ -62,6 +64,7 @@ export const cancelReminderTool = defineTool({
   description: 'Cancels a pending reminder by id (get ids from list_reminders).',
   risk: 'WRITE',
   schema: z.object({ id: z.string() }),
+  describe: () => 'Cancel a reminder',
   async execute({ user }, { id }) {
     const reminder = await cancelReminder(user._id, id);
     return { cancelled: reminder.text };

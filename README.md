@@ -24,12 +24,13 @@ openssl rand -base64 32     # ENCRYPTION_KEY (must be 32 bytes; share it with th
 1. In [Google Cloud Console](https://console.cloud.google.com/), create a project and enable the
    **Gmail API**, **Google Calendar API** and **Google Tasks API**.
 2. **OAuth consent screen**: External, add yourself as a test user. Add the scopes `openid`,
-   `email`, `profile`, `gmail.readonly`, `calendar.events` and `tasks`.
+   `email`, `profile`, `gmail.readonly`, `gmail.compose`, `gmail.send`, `calendar.events` and
+   `tasks`.
 3. **Credentials → Create OAuth client ID → Web application**. Authorized redirect URI:
    `http://localhost:4000/api/v1/auth/google/callback`.
 4. Copy the client ID and secret into `.env` as `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
 
-`gmail.readonly` is a _restricted_ scope: fine for test users, but going public needs Google's
+`gmail.readonly`, `gmail.compose` and `gmail.send` are _restricted_ scopes: fine for test users, but going public needs Google's
 verification and a security assessment. Plan for that before launch.
 
 ## Telegram setup
@@ -46,7 +47,9 @@ registers `POST /api/v1/telegram/webhook` on startup, and Telegram signs each ca
 
 Messages flow **Telegram adapter → `IncomingMessage` → message handler → responder**. The adapter
 is the only Telegram-specific code, so WhatsApp or web chat can reuse everything after it. The
-responder handles slash commands and echoes everything else until the agent arrives (Phase 6).
+responder handles slash commands and sends everything else to the agent. Commands: `/today`,
+`/free`, `/inbox`, `/tasks`, `/promises`, `/waiting`, `/briefing`, `/help`. Approval buttons
+arrive as Telegram `callback_query` updates.
 
 ## Gmail
 
@@ -87,16 +90,60 @@ message → context (memories, connected services, last 16 turns)
 - **LLM interface** (`agent/llm/types.ts`) is provider-agnostic. `GeminiProvider` (default model
   `gemini-3.5-flash-lite`) is the first implementation. Model turns are replayed verbatim during tool calling, because Gemini's thought
   signatures must be sent back unchanged. To swap models, add a provider.
-- **Tools** (`agent/tools/`): calendar events, free time, email search/read, tasks, reminders
-  (create/list/cancel) and memory (save/search/update/forget). Each declares a risk level. Only
-  READ and user-private WRITE tools are exposed until Phase 9 adds confirmations for actions
-  that affect other people.
+- **Tools** (`agent/tools/`): calendar (read, create, move, cancel), free time, email
+  (search, read, draft, send), tasks (list, create, complete), promises, who they're waiting on,
+  reminders and memory. Each declares a risk level and a one-line `describe()` of what a call
+  will do. See _Permissions_ below.
 - **Times**: tools take the user's local wall-clock time (`YYYY-MM-DDTHH:mm`) and return
   formatted local times, so the model never does timezone arithmetic.
 - **Safety**: tool arguments are validated before running. Failures go back to the model as
   messages, not exceptions. Email/event text is treated as data, not instructions. Every
   reply stores which tools ran, the model and token usage in the message's metadata.
 - **Reminders** are stored, then delivered by the worker on Telegram at the due time.
+
+### Permissions and approvals
+
+Every tool call goes through the executor (`agent/executor.ts`), which applies the policy in
+`actions/policy.ts` — in code, after the model has chosen the call, so neither the model nor an
+instruction hidden in an email can skip it.
+
+| Risk              | Examples                                      | Default  | User can set                        |
+| ----------------- | --------------------------------------------- | -------- | ----------------------------------- |
+| `READ`            | calendar, email search, tasks                 | runs     | –                                   |
+| `WRITE`           | reminders, Google Tasks, drafts, memory       | runs     | run / ask / never                   |
+| `EXTERNAL_ACTION` | send email, invite guests, move shared events | **asks** | run / ask / never                   |
+| `DESTRUCTIVE`     | cancel an event                               | **asks** | ask / never (never runs on its own) |
+
+- "Ask" stores the call as a pending `Action` and the reply comes with **Yes / No** buttons on
+  Telegram (also on the web Activity page). Requests expire after an hour.
+- Approval claims the action atomically (a double tap can't run it twice), re-validates the
+  arguments and checks the policy again, then runs it and edits the Telegram message with the
+  outcome. The outcome is also written into the conversation so the agent knows what happened.
+- Every non-READ call — run, approved, declined, expired or blocked — is in the `actions`
+  collection: the audit log behind `GET /actions` and the Activity page.
+- Risk can depend on the call: an event with guests is `EXTERNAL_ACTION`, without is `WRITE`.
+- **Sending email** is its own Google feature (`gmailSend`: `gmail.compose` + `gmail.send`), so
+  connecting Gmail never implies sending. Replies stay in their thread (`In-Reply-To` /
+  `References`); header values are checked for line breaks.
+
+### Proactive messages (sent by the worker)
+
+- **Daily briefing** at each user's briefing time: meetings, email that needs attention, promises
+  and tasks due, who they're waiting on. `/briefing` or the dashboard sends one on demand.
+- **Important email**: the worker triages new inbox mail (`priority` high/normal/low plus a short
+  reason) and alerts on Telegram about `high` ones, never overnight.
+- **Follow-ups** ("who am I waiting for?"): threads where the user wrote last and nobody answered
+  for 3 days, plus promises people made to the user. `/waiting`, `get_waiting_on`, and a nudge
+  during working hours. Replies close them automatically.
+- **Promise nudges**: a heads-up the day before, a nudge just before the deadline, one "still
+  open?" after it.
+
+### OpenAPI
+
+`GET /api/v1/openapi.json` describes the API (OpenAPI 3.1), built from the routes' own zod
+schemas and the response schemas in `src/openapi/schemas.ts`. `pnpm openapi` writes it to
+`openapi.json`, which the frontend turns into types. Tests parse real responses with the same
+schemas and check every documented path exists, so the spec can't drift silently.
 
 ### Evaluations
 
@@ -140,6 +187,7 @@ model change; `pnpm eval reminder` runs a subset.
 | `pnpm build` / `pnpm start`                    | Compile to `dist/` and run it                                   |
 | `pnpm typecheck` / `pnpm lint` / `pnpm format` | Quality checks                                                  |
 | `pnpm eval`                                    | Agent evaluation set against the real LLM (needs `LLM_API_KEY`) |
+| `pnpm openapi`                                 | Write `openapi.json` (then `pnpm api:types` in the frontend)    |
 | `pnpm test`                                    | Vitest; in-memory MongoDB (first run downloads it)              |
 | `pnpm redis:up` / `pnpm redis:down`            | Start/stop local Redis                                          |
 
@@ -149,41 +197,47 @@ model change; `pnpm eval reminder` runs a subset.
 - `GET /health/ready` — readiness (MongoDB + Redis), `503` when a dependency is down
 - `/api/v1/*` — versioned API (rate limited)
 
-| Method & path                                                                     | Auth   | What it does                                                |
-| --------------------------------------------------------------------------------- | ------ | ----------------------------------------------------------- |
-| `GET /auth/google?returnTo=`                                                      | –      | Redirects to Google sign-in                                 |
-| `GET /auth/google/callback`                                                       | –      | OAuth redirect URI for sign-in and connect                  |
-| `POST /auth/logout`                                                               | –      | Clears the session cookie                                   |
-| `POST /auth/logout-all`                                                           | ✓      | Signs out every device                                      |
-| `GET /users/me`                                                                   | ✓      | Current user                                                |
-| `PATCH /users/me`                                                                 | ✓      | Name, timezone, briefing preferences, `onboardingCompleted` |
-| `GET /integrations`                                                               | ✓      | Connected services (never includes tokens)                  |
-| `GET /integrations/google/connect?features=&returnTo=`                            | cookie | Redirects to Google to grant feature scopes                 |
-| `DELETE /integrations/google`                                                     | ✓      | Revokes the grant at Google and deletes the tokens          |
-| `POST /telegram/link`                                                             | ✓      | One-time `t.me` deep link for connecting Telegram           |
-| `DELETE /telegram/link`                                                           | ✓      | Disconnects Telegram                                        |
-| `POST /telegram/webhook`                                                          | secret | Telegram updates (webhook mode)                             |
-| `GET /conversations`                                                              | ✓      | The user's conversations                                    |
-| `GET /conversations/:id/messages?limit=&before=`                                  | ✓      | Messages, newest first                                      |
-| `GET /emails?q=&from=&after=&before=&today=&unread=&important=&inboxOnly=&limit=` | ✓      | Search synced email                                         |
-| `GET /emails/:id`                                                                 | ✓      | Full message with body (live from Gmail)                    |
-| `GET /emails/threads/:id`                                                         | ✓      | Whole thread (live from Gmail)                              |
-| `POST /emails/sync`                                                               | ✓      | Queue a sync now (deduplicated per user)                    |
-| `GET /calendar/events?date=&days=`                                                | ✓      | Events for local day(s), default today                      |
-| `GET /calendar/availability?date=&days=&duration=&includeWeekends=&limit=`        | ✓      | Free intervals + suggested slots (live)                     |
-| `POST /calendar/events`                                                           | ✓      | Create (invites guests if any)                              |
-| `PATCH /calendar/events/:id`                                                      | ✓      | Update / move (start-only keeps duration)                   |
-| `DELETE /calendar/events/:id`                                                     | ✓      | Cancel                                                      |
-| `POST /calendar/sync`                                                             | ✓      | Queue a calendar sync now                                   |
-| `GET /tasks?includeCompleted=`                                                    | ✓      | Google Tasks (default list)                                 |
-| `POST /tasks`, `PATCH /tasks/:id`, `POST /tasks/:id/complete`                     | ✓      | Create, update, complete                                    |
-| `GET /reminders?status=pending\|all`                                              | ✓      | Reminders                                                   |
-| `POST /reminders`                                                                 | ✓      | Create (`text`, `dueAt` ISO) — delivered on Telegram        |
-| `DELETE /reminders/:id`                                                           | ✓      | Cancel a pending reminder                                   |
-| `GET /memories`, `POST /memories`, `PATCH /memories/:id`, `DELETE /memories/:id`  | ✓      | Remembered facts                                            |
-| `GET /commitments?status=&direction=&person=&dueWithinDays=&sinceDays=`           | ✓      | Promises                                                    |
-| `POST /commitments`                                                               | ✓      | Record one by hand                                          |
-| `PATCH /commitments/:id`                                                          | ✓      | Complete, cancel or edit                                    |
+| Method & path                                                                                               | Auth   | What it does                                                |
+| ----------------------------------------------------------------------------------------------------------- | ------ | ----------------------------------------------------------- |
+| `GET /auth/google?returnTo=`                                                                                | –      | Redirects to Google sign-in                                 |
+| `GET /auth/google/callback`                                                                                 | –      | OAuth redirect URI for sign-in and connect                  |
+| `POST /auth/logout`                                                                                         | –      | Clears the session cookie                                   |
+| `POST /auth/logout-all`                                                                                     | ✓      | Signs out every device                                      |
+| `GET /users/me`                                                                                             | ✓      | Current user                                                |
+| `PATCH /users/me`                                                                                           | ✓      | Name, timezone, briefing preferences, `onboardingCompleted` |
+| `GET /integrations`                                                                                         | ✓      | Connected services (never includes tokens)                  |
+| `GET /integrations/google/connect?features=&returnTo=`                                                      | cookie | Redirects to Google to grant feature scopes                 |
+| `DELETE /integrations/google`                                                                               | ✓      | Revokes the grant at Google and deletes the tokens          |
+| `POST /telegram/link`                                                                                       | ✓      | One-time `t.me` deep link for connecting Telegram           |
+| `DELETE /telegram/link`                                                                                     | ✓      | Disconnects Telegram                                        |
+| `POST /telegram/webhook`                                                                                    | secret | Telegram updates (webhook mode)                             |
+| `GET /conversations`                                                                                        | ✓      | The user's conversations                                    |
+| `GET /conversations/:id/messages?limit=&before=`                                                            | ✓      | Messages, newest first                                      |
+| `GET /emails?q=&from=&after=&before=&today=&unread=&important=&priority=&needsAttention=&inboxOnly=&limit=` | ✓      | Search synced email                                         |
+| `GET /emails/:id`                                                                                           | ✓      | Full message with body (live from Gmail)                    |
+| `GET /emails/threads/:id`                                                                                   | ✓      | Whole thread (live from Gmail)                              |
+| `POST /emails/sync`                                                                                         | ✓      | Queue a sync now (deduplicated per user)                    |
+| `GET /calendar/events?date=&days=`                                                                          | ✓      | Events for local day(s), default today                      |
+| `GET /calendar/availability?date=&days=&duration=&includeWeekends=&limit=`                                  | ✓      | Free intervals + suggested slots (live)                     |
+| `POST /calendar/events`                                                                                     | ✓      | Create (invites guests if any)                              |
+| `PATCH /calendar/events/:id`                                                                                | ✓      | Update / move (start-only keeps duration)                   |
+| `DELETE /calendar/events/:id`                                                                               | ✓      | Cancel                                                      |
+| `POST /calendar/sync`                                                                                       | ✓      | Queue a calendar sync now                                   |
+| `GET /tasks?includeCompleted=`                                                                              | ✓      | Google Tasks (default list)                                 |
+| `POST /tasks`, `PATCH /tasks/:id`, `POST /tasks/:id/complete`                                               | ✓      | Create, update, complete                                    |
+| `GET /reminders?status=pending\|all`                                                                        | ✓      | Reminders                                                   |
+| `POST /reminders`                                                                                           | ✓      | Create (`text`, `dueAt` ISO) — delivered on Telegram        |
+| `DELETE /reminders/:id`                                                                                     | ✓      | Cancel a pending reminder                                   |
+| `GET /memories`, `POST /memories`, `PATCH /memories/:id`, `DELETE /memories/:id`                            | ✓      | Remembered facts                                            |
+| `GET /commitments?status=&direction=&person=&dueWithinDays=&sinceDays=`                                     | ✓      | Promises                                                    |
+| `POST /commitments`                                                                                         | ✓      | Record one by hand                                          |
+| `PATCH /commitments/:id`                                                                                    | ✓      | Complete, cancel or edit                                    |
+| `GET /follow-ups?status=`, `PATCH /follow-ups/:id`                                                          | ✓      | Unanswered sent email; close or reopen                      |
+| `GET /briefing`                                                                                             | ✓      | Live briefing numbers, last and next briefing               |
+| `POST /briefing/send`                                                                                       | ✓      | Send today's briefing to Telegram now                       |
+| `GET /actions?status=&before=&limit=`                                                                       | ✓      | Activity log (audit), newest first                          |
+| `POST /actions/:id/approve`, `POST /actions/:id/reject`                                                     | ✓      | Answer a pending approval from the web                      |
+| `GET /openapi.json`                                                                                         | –      | OpenAPI 3.1 spec                                            |
 
 OAuth redirects report problems back to the frontend as `?error=<code>` (see `AuthErrorCode`).
 

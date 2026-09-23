@@ -16,7 +16,7 @@ export const commitmentsRouter = Router();
 
 commitmentsRouter.use(requireAuth);
 
-const listQuerySchema = z.object({
+export const listQuerySchema = z.object({
   status: z.enum(COMMITMENT_STATUSES).optional(),
   direction: z.enum(COMMITMENT_DIRECTIONS).optional(),
   dueWithinDays: z.coerce.number().int().min(0).max(365).optional(),
@@ -31,7 +31,7 @@ commitmentsRouter.get('/', validate({ query: listQuerySchema }), async (req, res
   res.json({ commitments: commitments.map(toPublicCommitment) });
 });
 
-const createSchema = z
+export const createSchema = z
   .object({
     description: z.string().trim().min(1).max(300),
     direction: z.enum(COMMITMENT_DIRECTIONS).default('outgoing'),
@@ -52,7 +52,7 @@ commitmentsRouter.post('/', validate({ body: createSchema }), async (req, res) =
   res.status(201).json({ commitment: commitment ? toPublicCommitment(commitment) : null });
 });
 
-const patchSchema = z
+export const patchSchema = z
   .object({
     status: z.enum(COMMITMENT_STATUSES).optional(),
     description: z.string().trim().min(1).max(300).optional(),

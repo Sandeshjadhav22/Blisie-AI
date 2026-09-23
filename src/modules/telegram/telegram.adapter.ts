@@ -9,7 +9,9 @@ import { handleIncomingMessage } from '../conversations/message-handler.js';
 import { parseCommand } from '../conversations/responder.js';
 import { callTelegram, TelegramApiError } from './telegram.client.js';
 import { markdownToTelegramHtml } from './telegram.format.js';
+import { handleCallbackQuery } from './telegram.approvals.js';
 import { consumeLinkCode, type LinkResult } from './telegram.linking.js';
+import { attachTelegramMessage } from '../actions/actions.service.js';
 
 /**
  * Telegram channel adapter: turns a Telegram update into an IncomingMessage for the shared message
@@ -19,27 +21,43 @@ import { consumeLinkCode, type LinkResult } from './telegram.linking.js';
 // Telegram rejects messages over 4096 characters.
 const MAX_MESSAGE_LENGTH = 4096;
 
-export async function sendTelegramMessage(chatId: number, message: OutgoingMessage) {
+/** Sends a reply and returns Telegram's id for it. */
+export async function sendTelegramMessage(
+  chatId: number,
+  message: OutgoingMessage,
+): Promise<number> {
   const html = message.format === 'markdown' ? markdownToTelegramHtml(message.text) : message.text;
   const isHtml = message.format === 'html' || message.format === 'markdown';
   const text =
     html.length > MAX_MESSAGE_LENGTH ? `${html.slice(0, MAX_MESSAGE_LENGTH - 1)}…` : html;
+  const replyMarkup = message.buttons
+    ? {
+        reply_markup: {
+          inline_keyboard: message.buttons.map((row) =>
+            row.map((button) => ({ text: button.text, callback_data: button.data })),
+          ),
+        },
+      }
+    : {};
   try {
-    await callTelegram('sendMessage', {
+    const sent = await callTelegram('sendMessage', {
       chat_id: chatId,
       text,
       ...(isHtml ? { parse_mode: 'HTML' } : {}),
       link_preview_options: { is_disabled: true },
+      ...replyMarkup,
     });
+    return sent.message_id;
   } catch (error) {
     // Truncation or odd model output can leave HTML Telegram rejects; resend as plain text.
     if (isHtml && error instanceof TelegramApiError && error.errorCode === 400) {
-      await callTelegram('sendMessage', {
+      const sent = await callTelegram('sendMessage', {
         chat_id: chatId,
         text: message.text.slice(0, MAX_MESSAGE_LENGTH),
         link_preview_options: { is_disabled: true },
+        ...replyMarkup,
       });
-      return;
+      return sent.message_id;
     }
     throw error;
   }
@@ -61,6 +79,10 @@ function linkReply(result: LinkResult): string {
 }
 
 export async function handleTelegramUpdate(update: Update): Promise<void> {
+  if (update.callback_query) {
+    await handleCallbackQuery(update.callback_query);
+    return;
+  }
   const message = update.message;
   // Only private text messages for now; groups, edits, photos etc. are ignored.
   if (!message?.text || message.chat.type !== 'private') return;
@@ -103,6 +125,7 @@ export async function handleTelegramUpdate(update: Update): Promise<void> {
   });
 
   for (const reply of replies ?? []) {
-    await sendTelegramMessage(chatId, reply);
+    const messageId = await sendTelegramMessage(chatId, reply);
+    if (reply.actionId) await attachTelegramMessage(reply.actionId, String(chatId), messageId);
   }
 }

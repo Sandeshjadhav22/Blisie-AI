@@ -37,8 +37,12 @@ const commitmentSchema = new Schema(
     confidence: { type: Number, required: true, default: 1, min: 0, max: 1 },
     detectedAt: { type: Date, required: true, default: () => new Date() },
     completedAt: { type: Date },
-    /** When the user was last nudged about it, so we don't nag. */
+    /** When the user was nudged that it's nearly due (or overdue), so we don't nag. */
     remindedAt: { type: Date },
+    /** The heads-up a day before the deadline. */
+    upcomingNotifiedAt: { type: Date },
+    /** The one follow-up once it's past due and still open. */
+    overdueNotifiedAt: { type: Date },
     /** Normalised description; keeps re-scanning the same message from duplicating it. */
     dedupeKey: { type: String, required: true },
   },

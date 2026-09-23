@@ -1,7 +1,7 @@
 import { gmail, type gmail_v1 } from '@googleapis/gmail';
 import type { Types } from 'mongoose';
 
-import { type EmailDocument, EmailModel } from '../../../models/email.model.js';
+import { type EmailDocument, EmailModel, type EmailPriority } from '../../../models/email.model.js';
 import { NotFoundError } from '../../../utils/errors.js';
 import { withGoogleAuth } from '../google/google-client.js';
 import {
@@ -23,6 +23,10 @@ export interface EmailSearchFilters {
   important?: boolean;
   /** Only messages in the inbox (default) or everything synced, including sent mail. */
   inboxOnly?: boolean;
+  /** Our triage's priority (set by the worker). */
+  priority?: EmailPriority;
+  /** Our triage said `high`, or Gmail said important and it isn't triaged yet. */
+  needsAttention?: boolean;
   limit: number;
 }
 
@@ -50,6 +54,10 @@ export async function searchEmails(
   if (filters.unread !== undefined) query.isUnread = filters.unread;
   if (filters.important !== undefined) query.isImportant = filters.important;
   if (filters.inboxOnly !== false) query.isInbox = true;
+  if (filters.priority) query.priority = filters.priority;
+  if (filters.needsAttention) {
+    query.$and = [{ $or: [{ priority: 'high' }, { priority: null, isImportant: true }] }];
+  }
 
   return EmailModel.find(query).sort({ receivedAt: -1 }).limit(filters.limit);
 }
@@ -65,7 +73,24 @@ export function toPublicEmail(email: EmailDocument) {
     receivedAt: email.receivedAt.toISOString(),
     isUnread: email.isUnread,
     isImportant: email.isImportant,
+    priority: email.priority ?? null,
+    priorityReason: email.priorityReason ?? null,
     labelIds: email.labelIds,
+  };
+}
+
+/**
+ * Unread inbox email that needs the user: our triage said `high`, or — until the worker has
+ * triaged it — Gmail marked it important. The worker's briefing uses the same rule.
+ */
+export function importantEmailFilter(userId: Types.ObjectId, since: Date) {
+  return {
+    userId,
+    isInbox: true,
+    isSent: false,
+    isUnread: true,
+    receivedAt: { $gte: since },
+    $or: [{ priority: 'high' as const }, { priority: null, isImportant: true }],
   };
 }
 

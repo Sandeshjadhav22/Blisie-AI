@@ -10,6 +10,7 @@ import { handleTelegramUpdate } from '../src/modules/telegram/telegram.adapter.j
 import { callTelegram } from '../src/modules/telegram/telegram.client.js';
 import type * as TelegramClientModule from '../src/modules/telegram/telegram.client.js';
 import { encrypt } from '../src/utils/crypto.js';
+import { startOfDayInTimezone } from '../src/utils/time.js';
 import { useTestDatabase } from './helpers/db.js';
 import { createSignedInUser } from './helpers/session.js';
 
@@ -264,7 +265,10 @@ describe('/inbox on Telegram', () => {
       from: { name: 'Rahul <Sharma>', email: 'rahul@acme.com' },
       subject: 'Proposal & pricing',
       isUnread: true,
-      receivedAt: new Date(Date.now() - 60_000),
+      // A minute ago, but never before local midnight (the test may run just after it).
+      receivedAt: new Date(
+        Math.max(Date.now() - 60_000, startOfDayInTimezone(new Date(), 'Asia/Kolkata').getTime()),
+      ),
     });
     await seedEmail(user, {
       gmailId: 'old',

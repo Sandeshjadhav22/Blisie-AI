@@ -27,6 +27,7 @@ export function localDateTimeToUtc(value: string, timeZone: string): Date {
 
 const FEATURE_NAMES: Record<GoogleFeature, string> = {
   gmail: 'Gmail',
+  gmailSend: 'Sending email (Gmail)',
   calendar: 'Google Calendar',
   tasks: 'Google Tasks',
 };

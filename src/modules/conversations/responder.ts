@@ -1,5 +1,7 @@
 import { UserModel } from '../../models/user.model.js';
+import type { PendingApproval } from '../agent/executor.js';
 import { runAgent } from '../agent/orchestrator.js';
+import { escapeHtml } from '../../utils/html.js';
 import type { IncomingMessage, OutgoingMessage } from './channel.types.js';
 
 /**
@@ -66,5 +68,34 @@ export async function respond(message: IncomingMessage): Promise<OutgoingMessage
         },
       },
     },
+    ...result.pendingApprovals.map(approvalRequest),
   ];
+}
+
+/** Telegram callback data for the approval buttons. */
+export function approvalCallbackData(decision: 'approve' | 'reject', actionId: string): string {
+  return `act:${decision}:${actionId}`;
+}
+
+export function parseApprovalCallback(
+  data: string,
+): { decision: 'approve' | 'reject'; actionId: string } | null {
+  const match = /^act:(approve|reject):([a-f0-9]{24})$/.exec(data);
+  return match ? { decision: match[1] as 'approve' | 'reject', actionId: match[2] ?? '' } : null;
+}
+
+/** The "shall I?" message under the agent's reply, with Yes / No buttons. */
+function approvalRequest(pending: PendingApproval): OutgoingMessage {
+  return {
+    text: `<b>Needs your OK</b>\n${escapeHtml(pending.summary)}`,
+    format: 'html',
+    actionId: pending.actionId,
+    metadata: { approval: { actionId: pending.actionId } },
+    buttons: [
+      [
+        { text: '✅ Yes, do it', data: approvalCallbackData('approve', pending.actionId) },
+        { text: '✖️ No', data: approvalCallbackData('reject', pending.actionId) },
+      ],
+    ],
+  };
 }

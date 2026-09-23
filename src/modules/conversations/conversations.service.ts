@@ -84,11 +84,17 @@ export function toPublicConversation(conversation: ConversationDocument) {
   };
 }
 
+function messageFormat(message: MessageDocument): 'plain' | 'html' | 'markdown' {
+  const format = (message.metadata as { format?: unknown } | undefined)?.format;
+  return format === 'html' || format === 'markdown' ? format : 'plain';
+}
+
 export function toPublicMessage(message: MessageDocument) {
   return {
     id: message.id,
     role: message.role,
     text: message.text,
+    format: messageFormat(message),
     channel: message.channel,
     createdAt: message.createdAt.toISOString(),
   };

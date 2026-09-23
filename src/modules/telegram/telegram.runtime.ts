@@ -30,7 +30,7 @@ async function registerWebhook(): Promise<void> {
   await callTelegram('setWebhook', {
     url,
     secret_token: env.TELEGRAM_WEBHOOK_SECRET,
-    allowed_updates: ['message'],
+    allowed_updates: ['message', 'callback_query'],
     max_connections: 40,
   });
   logger.info({ url }, 'Telegram webhook registered');
@@ -60,7 +60,7 @@ function startPolling(): () => Promise<void> {
       try {
         const updates = await callTelegram(
           'getUpdates',
-          { offset, timeout: 25, allowed_updates: ['message'] },
+          { offset, timeout: 25, allowed_updates: ['message', 'callback_query'] },
           { signal: controller.signal, timeoutMs: 35_000 },
         );
         for (const update of updates) {
