@@ -7,7 +7,7 @@ import { callTelegram } from '../src/modules/telegram/telegram.client.js';
 import type * as TelegramClientModule from '../src/modules/telegram/telegram.client.js';
 import { useTestDatabase } from './helpers/db.js';
 import { connectGoogle } from './helpers/google.js';
-import { createSignedInUser } from './helpers/session.js';
+import { createSignedInUser, linkedChannel } from './helpers/session.js';
 
 const tasks = vi.hoisted(() => ({ list: vi.fn(), insert: vi.fn(), patch: vi.fn() }));
 vi.mock('@googleapis/tasks', () => ({ tasks: () => ({ tasks }) }));
@@ -114,7 +114,7 @@ describe('Google Tasks API', () => {
 
   it('/tasks lists open tasks in Telegram', async () => {
     const { user } = await tasksUser();
-    user.telegramId = '77';
+    user.set('channels', [linkedChannel('telegram', '77')]);
     await user.save();
     tasks.list.mockResolvedValue({
       data: {

@@ -1,6 +1,11 @@
 import type { Types } from 'mongoose';
 
+import type { Channel } from '../../models/conversation.model.js';
 import type { UserDocument } from '../../models/user.model.js';
+import { primaryChannelOf } from '../channels/channels.service.js';
+import { CHAT_CHANNELS, type ChatChannel } from '../channels/policy.js';
+import { featuresToRequest, googleConnectLink } from '../handoff/handoff.service.js';
+import type { GoogleFeature } from '../integrations/google/google.scopes.js';
 import { summarizeError } from '../../utils/error-summary.js';
 import { logger } from '../../utils/logger.js';
 import { loadContext } from './context.js';
@@ -9,7 +14,7 @@ import { getLlmProvider } from './llm/index.js';
 import { type AgentMessage, LlmError, type LlmProvider, type LlmUsage } from './llm/types.js';
 import { buildSystemPrompt } from './prompts/system.js';
 import { defaultTools } from './tools/index.js';
-import { type AgentTool, toToolSpec } from './tools/types.js';
+import { type AgentTool, type ToolContext, toToolSpec } from './tools/types.js';
 
 /**
  * The agent loop:
@@ -30,6 +35,8 @@ export interface AgentRunInput {
   text: string;
   /** The stored user message, so it isn't also loaded as history. */
   messageId?: Types.ObjectId;
+  /** Where the message came from (default: the user's primary chat app, else the web). */
+  channel?: Channel;
   now?: Date;
   /** Overrides for tests and evals. */
   provider?: LlmProvider | null;
@@ -61,6 +68,30 @@ function failureReply(error: unknown): string {
   return 'Sorry, something went wrong on my side. Please try again in a moment.';
 }
 
+function isChatChannel(channel: Channel): channel is ChatChannel {
+  return (CHAT_CHANNELS as readonly string[]).includes(channel);
+}
+
+/** One connect link per set of features per message, however many tools ask for one. */
+function connectLinks(input: AgentRunInput, channel: Channel): ToolContext['connectLink'] {
+  if (!isChatChannel(channel)) return undefined;
+  const links = new Map<string, Promise<string>>();
+  return (feature: GoogleFeature) => {
+    const features = featuresToRequest(feature);
+    const key = features.join(',');
+    let link = links.get(key);
+    if (!link) {
+      link = googleConnectLink(input.user, features, {
+        channel,
+        conversationId: input.conversationId,
+        messageId: input.messageId,
+      });
+      links.set(key, link);
+    }
+    return link;
+  };
+}
+
 export async function runAgent(input: AgentRunInput): Promise<AgentRunResult> {
   const provider = input.provider === undefined ? getLlmProvider() : input.provider;
   const toolCalls: AgentRunResult['toolCalls'] = [];
@@ -77,11 +108,17 @@ export async function runAgent(input: AgentRunInput): Promise<AgentRunResult> {
     conversationId: input.conversationId,
     text: input.text,
     beforeMessageId: input.messageId,
+    channel: input.channel ?? primaryChannelOf(input.user)?.type ?? 'web',
   });
   const system = buildSystemPrompt(input.user, context, now);
   const specs = tools.map(toToolSpec);
   const messages: AgentMessage[] = [...context.history, { role: 'user', text: input.text }];
-  const toolContext = { user: input.user, conversationId: input.conversationId, now };
+  const toolContext: ToolContext = {
+    user: input.user,
+    conversationId: input.conversationId,
+    now,
+    connectLink: connectLinks(input, context.channel),
+  };
 
   for (let step = 1; step <= MAX_STEPS; step += 1) {
     let response;

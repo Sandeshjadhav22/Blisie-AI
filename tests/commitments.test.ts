@@ -11,7 +11,7 @@ import { callTelegram } from '../src/modules/telegram/telegram.client.js';
 import type * as TelegramClientModule from '../src/modules/telegram/telegram.client.js';
 import { useTestDatabase } from './helpers/db.js';
 import { call, say, ScriptedLlm } from './helpers/fake-llm.js';
-import { createSignedInUser } from './helpers/session.js';
+import { createSignedInUser, linkedChannel } from './helpers/session.js';
 
 vi.mock('../src/modules/telegram/telegram.client.js', async (importOriginal) => ({
   ...(await importOriginal<typeof TelegramClientModule>()),
@@ -206,7 +206,7 @@ describe('the agent and commitments', () => {
 describe('/promises in Telegram', () => {
   it('lists what you owe and what others owe you, flagging overdue', async () => {
     const { user } = await commitmentUser();
-    user.telegramId = '99';
+    user.set('channels', [linkedChannel('telegram', '99')]);
     await user.save();
     await seed(user, {
       description: 'Send the <proposal>',
@@ -239,7 +239,7 @@ describe('/promises in Telegram', () => {
 
   it('says so when there is nothing outstanding', async () => {
     const { user } = await commitmentUser();
-    user.telegramId = '98';
+    user.set('channels', [linkedChannel('telegram', '98')]);
     await user.save();
 
     await handleTelegramUpdate({

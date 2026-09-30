@@ -9,6 +9,7 @@ import {
 import { EMAIL_PRIORITIES } from '../models/email.model.js';
 import { FOLLOW_UP_STATUSES } from '../models/follow-up.model.js';
 import { PERMISSION_MODES } from '../models/user.model.js';
+import { CHAT_CHANNELS } from '../modules/channels/policy.js';
 import { GOOGLE_FEATURES } from '../modules/integrations/google/google.scopes.js';
 
 /**
@@ -32,11 +33,14 @@ export const ErrorBody = z.object({
 export const User = z.object({
   id: z.string(),
   name: z.string(),
-  email: z.string(),
+  // Null for someone who started in a chat app and hasn't connected Google yet.
+  email: z.string().nullable(),
   avatarUrl: z.string().nullable(),
   timezone: z.string(),
-  telegramLinked: z.boolean(),
-  telegramUsername: z.string().nullable(),
+  channels: z.array(
+    z.object({ type: z.enum(CHAT_CHANNELS), username: z.string().nullable(), linkedAt: isoDate }),
+  ),
+  primaryChannel: z.enum(CHAT_CHANNELS).nullable(),
   preferences: z.object({
     dailyBriefingEnabled: z.boolean(),
     dailyBriefingTime: z.string(),

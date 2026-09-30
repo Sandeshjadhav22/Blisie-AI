@@ -70,7 +70,7 @@ integrationsRouter.get(
         state,
         codeChallenge,
         offline: true,
-        loginHint: user.email,
+        loginHint: user.email ?? undefined,
       }),
     );
   },

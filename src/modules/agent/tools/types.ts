@@ -2,6 +2,7 @@ import type { Types } from 'mongoose';
 import { z } from 'zod';
 
 import type { UserDocument } from '../../../models/user.model.js';
+import type { GoogleFeature } from '../../integrations/google/google.scopes.js';
 import type { JsonSchema, ToolSpec } from '../llm/types.js';
 
 /**
@@ -21,6 +22,11 @@ export interface ToolContext {
   user: UserDocument;
   conversationId: Types.ObjectId;
   now: Date;
+  /**
+   * In a chat: a link that connects Google right from there and then answers the current
+   * message. Absent elsewhere (the web app has its own Settings page).
+   */
+  connectLink?: (feature: GoogleFeature) => Promise<string>;
 }
 
 export interface AgentTool<S extends z.ZodType = z.ZodType> {
@@ -62,6 +68,17 @@ export class ToolError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'ToolError';
+  }
+}
+
+/** A Google feature the call needs isn't connected (or access was revoked). */
+export class FeatureMissingError extends ToolError {
+  constructor(
+    message: string,
+    public readonly feature: GoogleFeature,
+  ) {
+    super(message);
+    this.name = 'FeatureMissingError';
   }
 }
 

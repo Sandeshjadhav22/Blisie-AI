@@ -1,9 +1,11 @@
 import { type HydratedDocument, type InferSchemaType, model, Schema } from 'mongoose';
 
-export const REMINDER_STATUSES = ['pending', 'sent', 'cancelled', 'failed'] as const;
+/** `held`: due, but the chat app couldn't take it then; it goes out with the user's next message. */
+export const REMINDER_STATUSES = ['pending', 'held', 'sent', 'cancelled', 'failed'] as const;
 
 /**
- * A one-off reminder delivered on Telegram at `dueAt`. The worker repo keeps an identical copy.
+ * A one-off reminder delivered in the user's chat app at `dueAt`. The worker repo keeps an
+ * identical copy.
  */
 const reminderSchema = new Schema(
   {

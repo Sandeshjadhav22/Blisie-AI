@@ -4,6 +4,7 @@ import { actionsRouter } from './modules/actions/actions.routes.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { registerBriefingCommands } from './modules/briefing/briefing.commands.js';
 import { briefingRouter } from './modules/briefing/briefing.routes.js';
+import { channelsRouter } from './modules/channels/channels.routes.js';
 import { registerCommitmentCommands } from './modules/commitments/commitments.commands.js';
 import { commitmentsRouter } from './modules/commitments/commitments.routes.js';
 import { conversationsRouter } from './modules/conversations/conversations.routes.js';
@@ -14,12 +15,16 @@ import { registerGmailCommands } from './modules/integrations/gmail/gmail.comman
 import { emailsRouter } from './modules/integrations/gmail/gmail.routes.js';
 import { registerFollowUpCommands } from './modules/follow-ups/follow-ups.commands.js';
 import { followUpsRouter } from './modules/follow-ups/follow-ups.routes.js';
+import { handoffRouter } from './modules/handoff/handoff.routes.js';
 import { integrationsRouter } from './modules/integrations/integrations.routes.js';
 import { memoriesRouter } from './modules/memory/memory.routes.js';
 import { remindersRouter } from './modules/reminders/reminders.routes.js';
 import { registerTasksCommands } from './modules/integrations/tasks/tasks.commands.js';
 import { tasksRouter } from './modules/integrations/tasks/tasks.routes.js';
+import { registerTelegramChannel } from './modules/telegram/telegram.adapter.js';
 import { telegramRouter } from './modules/telegram/telegram.routes.js';
+import { registerWhatsAppChannel } from './modules/whatsapp/whatsapp.adapter.js';
+import { whatsappRouter } from './modules/whatsapp/whatsapp.routes.js';
 import { usersRouter } from './modules/users/users.routes.js';
 
 /** Versioned API router mounted at /api/v1. Feature modules register their routers here. */
@@ -38,8 +43,11 @@ apiRouter.get('/openapi.json', (_req, res) => {
 
 apiRouter.use('/auth', authRouter);
 apiRouter.use('/users', usersRouter);
+apiRouter.use('/handoff', handoffRouter);
 apiRouter.use('/integrations', integrationsRouter);
+apiRouter.use('/channels', channelsRouter);
 apiRouter.use('/telegram', telegramRouter);
+apiRouter.use('/whatsapp', whatsappRouter);
 apiRouter.use('/conversations', conversationsRouter);
 apiRouter.use('/emails', emailsRouter);
 apiRouter.use('/calendar', calendarRouter);
@@ -50,6 +58,10 @@ apiRouter.use('/commitments', commitmentsRouter);
 apiRouter.use('/follow-ups', followUpsRouter);
 apiRouter.use('/briefing', briefingRouter);
 apiRouter.use('/actions', actionsRouter);
+
+// Chat apps. Each is off until its credentials are set.
+registerTelegramChannel();
+registerWhatsAppChannel();
 
 // Chat commands contributed by feature modules.
 registerGmailCommands();

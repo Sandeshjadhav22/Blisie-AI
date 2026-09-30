@@ -23,11 +23,11 @@ export interface IncomingMessage {
 export interface OutgoingMessage {
   text: string;
   /**
-   * `html`: a small safe subset (<b>, <i>, <a href>, <code>) with everything else escaped.
-   * `markdown`: light Markdown written by the agent (**bold**, *italic*, `code`, [link](url),
-   * "- " bullets). Adapters convert either to what their platform supports.
+   * `markdown`: light Markdown (**bold**, _italic_, `code`, [link](url), "- " bullets), written by
+   * the agent and our commands. Each adapter converts it to what its app supports, escaping
+   * everything else, so no text can inject markup.
    */
-  format?: 'plain' | 'html' | 'markdown';
+  format?: 'plain' | 'markdown';
   /** Stored with the message (e.g. which tools the agent used). Not shown to the user. */
   metadata?: Record<string, unknown>;
   /**

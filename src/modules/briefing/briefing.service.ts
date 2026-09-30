@@ -13,6 +13,8 @@ import {
   zonedTimeToUtc,
 } from '../../utils/time.js';
 import { countPendingActions } from '../actions/actions.service.js';
+import { primaryChannelOf } from '../channels/channels.service.js';
+import { CHANNEL_RULES } from '../channels/policy.js';
 import { importantEmailFilter } from '../integrations/gmail/gmail.service.js';
 
 /**
@@ -35,7 +37,11 @@ export interface BriefingSummary {
 }
 
 function nextBriefingAt(user: UserDocument, now: Date, sentToday: boolean): Date | null {
-  if (!user.preferences.dailyBriefingEnabled || !user.telegramId) return null;
+  const linked = primaryChannelOf(user);
+  // Chat apps that only answer (WhatsApp) get no scheduled briefing.
+  if (!user.preferences.dailyBriefingEnabled || !linked || !CHANNEL_RULES[linked.type].proactive) {
+    return null;
+  }
   const minutes = parseTimeOfDay(user.preferences.dailyBriefingTime);
   const today = toDateString(now, user.timezone);
   const at = (date: string) =>

@@ -2,6 +2,8 @@ import { z } from 'zod';
 
 import { API_PREFIX, SESSION_COOKIE } from '../config/constants.js';
 import { actionListQuerySchema } from '../modules/actions/actions.routes.js';
+import { primaryChannelSchema } from '../modules/channels/channels.routes.js';
+import { CHAT_CHANNELS } from '../modules/channels/policy.js';
 import {
   createSchema as commitmentCreateSchema,
   listQuerySchema as commitmentListQuerySchema,
@@ -18,6 +20,7 @@ import {
   eventsQuerySchema,
   updateEventSchema,
 } from '../modules/integrations/calendar/calendar.routes.js';
+import { completeSetupSchema, openSetupSchema } from '../modules/handoff/handoff.routes.js';
 import { searchQuerySchema } from '../modules/integrations/gmail/gmail.routes.js';
 import { connectQuerySchema } from '../modules/integrations/integrations.routes.js';
 import {
@@ -31,7 +34,7 @@ import {
   listSchema as reminderListSchema,
 } from '../modules/reminders/reminders.routes.js';
 import { updateMeSchema } from '../modules/users/users.schemas.js';
-import { type ComponentName, components } from './schemas.js';
+import { type ComponentName, components, User } from './schemas.js';
 
 /**
  * The OpenAPI 3.1 description of /api/v1, built from the same zod schemas the routes validate
@@ -70,9 +73,15 @@ interface Operation {
   errors?: number[];
 }
 
-type Method = 'get' | 'post' | 'patch' | 'delete';
+type Method = 'get' | 'post' | 'patch' | 'put' | 'delete';
 
 const QUEUED = object({ status: { type: 'string', const: 'queued' } });
+
+/** The same `channels` / `primaryChannel` fields the User has. */
+const CHANNELS_BODY = {
+  channels: toJson(User.shape.channels, 'output'),
+  primaryChannel: toJson(User.shape.primaryChannel, 'output'),
+};
 
 const routes: Record<string, Partial<Record<Method, Operation>>> = {
   '/users/me': {
@@ -82,6 +91,27 @@ const routes: Record<string, Partial<Record<Method, Operation>>> = {
       tag: 'Users',
       body: updateMeSchema,
       response: object({ user: ref('User') }),
+    },
+  },
+  '/handoff/setup/open': {
+    post: {
+      summary: 'Open a setup link sent in the chat: signs this browser in as its owner',
+      tag: 'Users',
+      auth: false,
+      body: openSetupSchema,
+      response: object({ user: ref('User') }),
+      errors: [404],
+    },
+  },
+  '/handoff/setup/complete': {
+    post: {
+      summary: 'Finish setting up (name, timezone); the chat then answers their first message',
+      tag: 'Users',
+      body: completeSetupSchema,
+      response: object({
+        user: ref('User'),
+        chat: { type: ['string', 'null'], enum: [...CHAT_CHANNELS, null] },
+      }),
     },
   },
   '/integrations': {
@@ -108,14 +138,43 @@ const routes: Record<string, Partial<Record<Method, Operation>>> = {
       response: null,
     },
   },
-  '/telegram/link': {
+  '/channels': {
+    get: {
+      summary: 'Chat apps that can be connected, the linked ones, and the primary one',
+      tag: 'Channels',
+      response: object({
+        available: {
+          type: 'array',
+          items: object({
+            type: { type: 'string', enum: [...CHAT_CHANNELS] },
+            name: { type: 'string' },
+            proactive: { type: 'boolean' },
+          }),
+        },
+        ...CHANNELS_BODY,
+      }),
+    },
+  },
+  '/channels/{channel}/link': {
     post: {
-      summary: 'One-time t.me deep link for connecting Telegram',
-      tag: 'Telegram',
+      summary: 'One-time link that connects this chat app (t.me or wa.me)',
+      tag: 'Channels',
       status: 201,
       response: object({ url: { type: 'string' }, expiresAt: { type: 'string' } }),
+      errors: [503],
     },
-    delete: { summary: 'Disconnect Telegram', tag: 'Telegram', status: 204, response: null },
+  },
+  '/channels/{channel}': {
+    delete: { summary: 'Disconnect a chat app', tag: 'Channels', status: 204, response: null },
+  },
+  '/channels/primary': {
+    put: {
+      summary: 'Choose which linked chat app gets messages',
+      tag: 'Channels',
+      body: primaryChannelSchema,
+      response: object(CHANNELS_BODY),
+      errors: [409],
+    },
   },
   '/briefing': {
     get: {
@@ -381,6 +440,7 @@ const STATUS_TEXT: Record<number, string> = {
   404: 'Not found',
   409: 'Conflict (e.g. a service is not connected, or the request was already answered)',
   422: 'Validation failed',
+  503: 'Not set up on this server',
 };
 
 function queryParameters(schema: z.ZodType): JsonSchema[] {

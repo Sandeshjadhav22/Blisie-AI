@@ -10,7 +10,7 @@ import type * as TelegramClientModule from '../src/modules/telegram/telegram.cli
 import { toDateString } from '../src/utils/time.js';
 import { useTestDatabase } from './helpers/db.js';
 import { connectGoogle } from './helpers/google.js';
-import { createSignedInUser } from './helpers/session.js';
+import { createSignedInUser, linkedChannel } from './helpers/session.js';
 
 const events = vi.hoisted(() => ({
   list: vi.fn(),
@@ -291,7 +291,7 @@ describe('Telegram calendar commands', () => {
 
   async function telegramCalendarUser() {
     const { user } = await calendarUser();
-    user.telegramId = '1';
+    user.set('channels', [linkedChannel('telegram', '1')]);
     await user.save();
     return user;
   }

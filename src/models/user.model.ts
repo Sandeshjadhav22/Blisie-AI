@@ -1,5 +1,7 @@
 import { type HydratedDocument, type InferSchemaType, model, Schema } from 'mongoose';
 
+import { CHAT_CHANNELS } from '../modules/channels/policy.js';
+
 const preferencesSchema = new Schema(
   {
     dailyBriefingEnabled: { type: Boolean, default: true },
@@ -33,20 +35,37 @@ const permissionsSchema = new Schema(
   { _id: false },
 );
 
+/** A chat app (Telegram, WhatsApp) linked to the account. */
+const channelSchema = new Schema(
+  {
+    type: { type: String, enum: CHAT_CHANNELS, required: true },
+    // The user's id on that app: Telegram user id, or WhatsApp phone number (wa_id).
+    externalId: { type: String, required: true },
+    // "telegram:123" — unique across users, so one chat account belongs to one user.
+    key: { type: String, required: true },
+    username: { type: String },
+    linkedAt: { type: Date, required: true },
+    // When the user last wrote to us there (WhatsApp's 24-hour reply window starts here).
+    lastInboundAt: { type: Date },
+  },
+  { _id: false },
+);
+
 const userSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
-    email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+    // Absent for people who started in a chat app and haven't connected Google yet.
+    email: { type: String, unique: true, sparse: true, lowercase: true, trim: true },
     avatarUrl: { type: String },
     googleId: { type: String, unique: true, sparse: true },
     // IANA timezone, e.g. "Asia/Kolkata". Set during onboarding.
     timezone: { type: String, required: true, default: 'UTC' },
-    // Telegram user IDs can exceed 32 bits, so they're stored as strings.
-    telegramId: { type: String, unique: true, sparse: true },
-    telegramUsername: { type: String },
-    // One-time code for linking Telegram (sha256 of the code in the deep link).
-    telegramLinkCodeHash: { type: String, select: false, index: { sparse: true } },
-    telegramLinkCodeExpiresAt: { type: Date, select: false },
+    channels: { type: [channelSchema], default: [] },
+    // Where proactive messages and reminders go when several chat apps are linked.
+    primaryChannel: { type: String, enum: CHAT_CHANNELS },
+    // One-time code for linking a chat app (sha256 of the code in the link).
+    channelLinkCodeHash: { type: String, select: false, index: { sparse: true } },
+    channelLinkCodeExpiresAt: { type: Date, select: false },
     preferences: { type: preferencesSchema, default: () => ({}) },
     permissions: { type: permissionsSchema, default: () => ({}) },
     onboardingCompletedAt: { type: Date },
@@ -55,6 +74,11 @@ const userSchema = new Schema(
     lastLoginAt: { type: Date },
   },
   { timestamps: true },
+);
+
+userSchema.index(
+  { 'channels.key': 1 },
+  { unique: true, partialFilterExpression: { 'channels.key': { $exists: true } } },
 );
 
 export type User = InferSchemaType<typeof userSchema>;

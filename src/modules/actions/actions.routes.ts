@@ -5,7 +5,7 @@ import { getAuthUser, requireAuth } from '../../middleware/require-auth.js';
 import { validate } from '../../middleware/validate.js';
 import { ACTION_STATUSES } from '../../models/action.model.js';
 import { ConflictError } from '../../utils/errors.js';
-import { announceDecision } from '../telegram/telegram.approvals.js';
+import { announceDecision } from './approvals.js';
 import {
   approveAction,
   type DecisionOutcome,

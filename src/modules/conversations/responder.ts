@@ -1,7 +1,6 @@
 import { UserModel } from '../../models/user.model.js';
 import type { PendingApproval } from '../agent/executor.js';
 import { runAgent } from '../agent/orchestrator.js';
-import { escapeHtml } from '../../utils/html.js';
 import type { IncomingMessage, OutgoingMessage } from './channel.types.js';
 
 /**
@@ -54,6 +53,7 @@ export async function respond(message: IncomingMessage): Promise<OutgoingMessage
     conversationId: message.conversationId,
     text: message.text,
     messageId: message.messageId,
+    channel: message.channel,
   });
   return [
     {
@@ -87,8 +87,8 @@ export function parseApprovalCallback(
 /** The "shall I?" message under the agent's reply, with Yes / No buttons. */
 function approvalRequest(pending: PendingApproval): OutgoingMessage {
   return {
-    text: `<b>Needs your OK</b>\n${escapeHtml(pending.summary)}`,
-    format: 'html',
+    text: `**Needs your OK**\n${pending.summary}`,
+    format: 'markdown',
     actionId: pending.actionId,
     metadata: { approval: { actionId: pending.actionId } },
     buttons: [

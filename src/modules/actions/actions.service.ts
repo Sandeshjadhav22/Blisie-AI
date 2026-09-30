@@ -1,6 +1,11 @@
 import { isValidObjectId, type Types } from 'mongoose';
 
-import { type ActionDocument, ActionModel, type ActionStatus } from '../../models/action.model.js';
+import {
+  type ActionDecider,
+  type ActionDocument,
+  ActionModel,
+  type ActionStatus,
+} from '../../models/action.model.js';
 import { type UserDocument, UserModel } from '../../models/user.model.js';
 import { NotFoundError } from '../../utils/errors.js';
 import { summarizeError } from '../../utils/error-summary.js';
@@ -8,6 +13,7 @@ import { logger } from '../../utils/logger.js';
 import { defaultTools } from '../agent/tools/index.js';
 import { runTool } from '../agent/tools/run.js';
 import { type AgentTool, riskOf, type ToolRisk } from '../agent/tools/types.js';
+import type { ChatChannel } from '../channels/policy.js';
 import { APPROVAL_TTL_MS, decide } from './policy.js';
 
 /** Result output is kept for the activity page; anything big is cut. */
@@ -58,13 +64,12 @@ export async function createPendingAction(
   });
 }
 
-/** Remembers which Telegram message carries the buttons, so it can be updated later. */
-export async function attachTelegramMessage(
+/** Remembers which chat message carries the buttons, so it can be updated later. */
+export async function attachChannelMessage(
   actionId: string,
-  chatId: string,
-  messageId: number,
+  channelMessage: { channel: ChatChannel; chatId: string; messageId: string },
 ): Promise<void> {
-  await ActionModel.updateOne({ _id: actionId }, { $set: { telegram: { chatId, messageId } } });
+  await ActionModel.updateOne({ _id: actionId }, { $set: { channelMessage } });
 }
 
 /** Lazily marks unanswered requests as expired. */
@@ -110,7 +115,7 @@ async function explainUnclaimed(
 export async function approveAction(
   userId: Types.ObjectId,
   id: string,
-  by: 'telegram' | 'web',
+  by: Exclude<ActionDecider, 'policy'>,
   now = new Date(),
 ): Promise<{ action: ActionDocument; outcome: DecisionOutcome }> {
   const claimed = isValidObjectId(id)
@@ -169,7 +174,7 @@ export async function approveAction(
 export async function rejectAction(
   userId: Types.ObjectId,
   id: string,
-  by: 'telegram' | 'web',
+  by: Exclude<ActionDecider, 'policy'>,
   now = new Date(),
 ): Promise<{ action: ActionDocument; outcome: DecisionOutcome }> {
   const action = isValidObjectId(id)

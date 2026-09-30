@@ -115,7 +115,8 @@ describe('GET /auth/google/callback (sign-in)', () => {
       name: 'Sandesh',
       email: 'sandesh@example.com',
       timezone: 'UTC',
-      telegramLinked: false,
+      channels: [],
+      primaryChannel: null,
       onboardingCompleted: false,
     });
   });

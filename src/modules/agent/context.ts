@@ -1,5 +1,7 @@
 import type { Types } from 'mongoose';
 
+import type { Channel } from '../../models/conversation.model.js';
+
 import { IntegrationModel, REAUTH_REQUIRED } from '../../models/integration.model.js';
 import { type MemoryDocument } from '../../models/memory.model.js';
 import { MessageModel } from '../../models/message.model.js';
@@ -19,7 +21,8 @@ const MEMORY_LIMIT = 12;
 export interface AgentContext {
   features: Record<GoogleFeature, boolean>;
   googleNeedsReconnect: boolean;
-  telegramLinked: boolean;
+  /** The chat app this conversation is on (or the web). */
+  channel: Channel;
   memories: MemoryDocument[];
   history: AgentMessage[];
 }
@@ -66,6 +69,7 @@ export async function loadContext(input: {
   conversationId: Types.ObjectId;
   text: string;
   beforeMessageId?: Types.ObjectId;
+  channel: Channel;
 }): Promise<AgentContext> {
   const [integration, memories, history] = await Promise.all([
     IntegrationModel.findOne({ userId: input.user._id, provider: 'google' }).lean(),
@@ -75,7 +79,7 @@ export async function loadContext(input: {
   return {
     features: featuresFromScopes(integration?.scopes ?? []),
     googleNeedsReconnect: integration?.lastError === REAUTH_REQUIRED,
-    telegramLinked: Boolean(input.user.telegramId),
+    channel: input.channel,
     memories,
     history,
   };

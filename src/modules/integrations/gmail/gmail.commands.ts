@@ -1,7 +1,6 @@
 import { env } from '../../../config/env.js';
 import { IntegrationModel, REAUTH_REQUIRED } from '../../../models/integration.model.js';
 import { UserModel } from '../../../models/user.model.js';
-import { escapeHtml } from '../../../utils/html.js';
 import { formatTime, startOfDayInTimezone } from '../../../utils/time.js';
 import type { OutgoingMessage } from '../../conversations/channel.types.js';
 import { registerCommand } from '../../conversations/responder.js';
@@ -38,17 +37,17 @@ async function inbox(userId: Parameters<typeof searchEmails>[0]): Promise<Outgoi
 
   const unread = emails.filter((email) => email.isUnread).length;
   const lines = emails.slice(0, MAX_LISTED).map((email) => {
-    const sender = escapeHtml(email.from?.name ?? email.from?.email ?? 'Unknown sender');
-    const subject = escapeHtml(email.subject || '(no subject)');
+    const sender = email.from?.name ?? email.from?.email ?? 'Unknown sender';
+    const subject = email.subject || '(no subject)';
     const marker = email.isUnread ? '🔵 ' : '';
-    return `${marker}${formatTime(email.receivedAt, user.timezone)} — <b>${sender}</b>: ${subject}`;
+    return `${marker}${formatTime(email.receivedAt, user.timezone)} — **${sender}**: ${subject}`;
   });
   const more = emails.length > MAX_LISTED ? `\n…and ${emails.length - MAX_LISTED} more` : '';
-  const title = `📬 <b>${emails.length} email${emails.length === 1 ? '' : 's'} today</b>${
+  const title = `📬 **${emails.length} email${emails.length === 1 ? '' : 's'} today**${
     unread ? ` (${unread} unread)` : ''
   }`;
 
-  return [{ text: `${title}\n\n${lines.join('\n')}${more}`, format: 'html' }];
+  return [{ text: `${title}\n\n${lines.join('\n')}${more}`, format: 'markdown' }];
 }
 
 export function registerGmailCommands(): void {

@@ -1,6 +1,5 @@
 import { env } from '../../../config/env.js';
 import { AppError } from '../../../utils/errors.js';
-import { escapeHtml } from '../../../utils/html.js';
 import type { OutgoingMessage } from '../../conversations/channel.types.js';
 import { registerCommand } from '../../conversations/responder.js';
 import { listTasks } from './tasks.service.js';
@@ -13,14 +12,14 @@ async function openTasks(userId: Parameters<typeof listTasks>[0]): Promise<Outgo
     const tasks = await listTasks(userId, { includeCompleted: false });
     if (tasks.length === 0) return [{ text: 'No open tasks. 🎉' }];
     const lines = tasks.slice(0, MAX_LISTED).map((task) => {
-      const due = task.due ? ` <i>(due ${task.due})</i>` : '';
-      return `☐ ${escapeHtml(task.title || '(untitled)')}${due}`;
+      const due = task.due ? ` _(due ${task.due})_` : '';
+      return `☐ ${task.title || '(untitled)'}${due}`;
     });
     const more = tasks.length > MAX_LISTED ? `\n…and ${tasks.length - MAX_LISTED} more` : '';
     return [
       {
-        text: `✅ <b>${tasks.length} open task${tasks.length === 1 ? '' : 's'}</b>\n\n${lines.join('\n')}${more}`,
-        format: 'html',
+        text: `✅ **${tasks.length} open task${tasks.length === 1 ? '' : 's'}**\n\n${lines.join('\n')}${more}`,
+        format: 'markdown',
       },
     ];
   } catch (error) {

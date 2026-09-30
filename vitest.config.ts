@@ -21,6 +21,11 @@ export default defineConfig({
       TELEGRAM_BOT_TOKEN: '123456:test-token',
       TELEGRAM_WEBHOOK_SECRET: 'test-webhook-secret-0123456789',
       TELEGRAM_MODE: 'webhook',
+      WHATSAPP_ACCESS_TOKEN: 'test-whatsapp-token',
+      WHATSAPP_PHONE_NUMBER_ID: '1234567890',
+      WHATSAPP_BUSINESS_NUMBER: '15550001111',
+      WHATSAPP_APP_SECRET: 'test-whatsapp-app-secret',
+      WHATSAPP_VERIFY_TOKEN: 'test-verify-token',
     },
   },
 });

@@ -182,7 +182,10 @@ describe('actions through the agent', () => {
     // Nothing ran yet: the model was told it's awaiting approval, and buttons went out.
     expect(await ReminderModel.countDocuments()).toBe(0);
     const action = await ActionModel.findOne({ userId: user._id });
-    expect(action).toMatchObject({ status: 'pending', telegram: { messageId: 77 } });
+    expect(action).toMatchObject({
+      status: 'pending',
+      channelMessage: { channel: 'telegram', messageId: '77' },
+    });
     const request = telegramCalls('sendMessage').find((args) => 'reply_markup' in args);
     expect(request?.text).toContain('Needs your OK');
     expect(request?.reply_markup).toEqual({

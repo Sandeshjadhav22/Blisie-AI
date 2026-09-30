@@ -53,6 +53,8 @@ export type OAuthState =
       returnTo?: string;
       userId: string;
       features: GoogleFeature[];
+      /** Started from a link in the chat rather than the web app (see handoff.service.ts). */
+      handoffId?: string;
     };
 
 export async function signOAuthState(value: OAuthState): Promise<string> {

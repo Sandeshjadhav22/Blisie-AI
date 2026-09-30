@@ -183,6 +183,162 @@
         }
       }
     },
+    "/handoff/setup/open": {
+      "post": {
+        "summary": "Open a setup link sent in the chat: signs this browser in as its owner",
+        "tags": [
+          "Users"
+        ],
+        "security": [],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "token"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    }
+                  },
+                  "required": [
+                    "user"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/handoff/setup/complete": {
+      "post": {
+        "summary": "Finish setting up (name, timezone); the chat then answers their first message",
+        "tags": [
+          "Users"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
+                  "timezone": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "timezone"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    },
+                    "chat": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "enum": [
+                        "telegram",
+                        "whatsapp",
+                        null
+                      ]
+                    }
+                  },
+                  "required": [
+                    "user",
+                    "chat"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/integrations": {
       "get": {
         "summary": "Connected services (never includes tokens)",
@@ -300,13 +456,132 @@
         }
       }
     },
-    "/telegram/link": {
-      "post": {
-        "summary": "One-time t.me deep link for connecting Telegram",
+    "/channels": {
+      "get": {
+        "summary": "Chat apps that can be connected, the linked ones, and the primary one",
         "tags": [
-          "Telegram"
+          "Channels"
         ],
         "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "available": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "telegram",
+                              "whatsapp"
+                            ]
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "proactive": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "name",
+                          "proactive"
+                        ]
+                      }
+                    },
+                    "channels": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "telegram",
+                              "whatsapp"
+                            ]
+                          },
+                          "username": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "linkedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "username",
+                          "linkedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "primaryChannel": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "telegram",
+                            "whatsapp"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "available",
+                    "channels",
+                    "primaryChannel"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/channels/{channel}/link": {
+      "post": {
+        "summary": "One-time link that connects this chat app (t.me or wa.me)",
+        "tags": [
+          "Channels"
+        ],
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "201": {
             "description": "Success",
@@ -339,21 +614,168 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Not set up on this server",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
-      },
+      }
+    },
+    "/channels/{channel}": {
       "delete": {
-        "summary": "Disconnect Telegram",
+        "summary": "Disconnect a chat app",
         "tags": [
-          "Telegram"
+          "Channels"
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "204": {
             "description": "Success"
           },
           "401": {
             "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/channels/primary": {
+      "put": {
+        "summary": "Choose which linked chat app gets messages",
+        "tags": [
+          "Channels"
+        ],
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "channel": {
+                    "type": "string",
+                    "enum": [
+                      "telegram",
+                      "whatsapp"
+                    ]
+                  }
+                },
+                "required": [
+                  "channel"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "channels": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "enum": [
+                              "telegram",
+                              "whatsapp"
+                            ]
+                          },
+                          "username": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "linkedAt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "username",
+                          "linkedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "primaryChannel": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "telegram",
+                            "whatsapp"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "channels",
+                    "primaryChannel"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict (e.g. a service is not connected, or the request was already answered)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
             "content": {
               "application/json": {
                 "schema": {
@@ -3062,7 +3484,10 @@
             "type": "string"
           },
           "email": {
-            "type": "string"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "avatarUrl": {
             "type": [
@@ -3073,13 +3498,50 @@
           "timezone": {
             "type": "string"
           },
-          "telegramLinked": {
-            "type": "boolean"
+          "channels": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "telegram",
+                    "whatsapp"
+                  ]
+                },
+                "username": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "linkedAt": {
+                  "type": "string",
+                  "format": "date-time",
+                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+                }
+              },
+              "required": [
+                "type",
+                "username",
+                "linkedAt"
+              ],
+              "additionalProperties": false
+            }
           },
-          "telegramUsername": {
-            "type": [
-              "string",
-              "null"
+          "primaryChannel": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "telegram",
+                  "whatsapp"
+                ]
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "preferences": {
@@ -3163,8 +3625,8 @@
           "email",
           "avatarUrl",
           "timezone",
-          "telegramLinked",
-          "telegramUsername",
+          "channels",
+          "primaryChannel",
           "preferences",
           "permissions",
           "onboardingCompleted",
@@ -4102,8 +4564,9 @@
                 "type": "string",
                 "enum": [
                   "policy",
+                  "web",
                   "telegram",
-                  "web"
+                  "whatsapp"
                 ]
               },
               {

@@ -6,7 +6,8 @@ import { type HydratedDocument, type InferSchemaType, model, Schema } from 'mong
  * The worker repo keeps an identical copy — change both together.
  */
 export const BRIEFING_TRIGGERS = ['scheduled', 'manual'] as const;
-export const BRIEFING_STATUSES = ['sending', 'sent', 'failed'] as const;
+/** `skipped`: the user's chat app couldn't take it (e.g. WhatsApp outside the reply window). */
+export const BRIEFING_STATUSES = ['sending', 'sent', 'failed', 'skipped'] as const;
 
 const countsSchema = new Schema(
   {
@@ -27,7 +28,7 @@ const briefingSchema = new Schema(
     date: { type: String, required: true },
     trigger: { type: String, enum: BRIEFING_TRIGGERS, required: true },
     status: { type: String, enum: BRIEFING_STATUSES, required: true, default: 'sending' },
-    /** The message as sent (Telegram HTML). */
+    /** The message as sent (light Markdown; each chat app renders it). */
     text: { type: String },
     counts: { type: countsSchema, default: () => ({}) },
     sentAt: { type: Date },

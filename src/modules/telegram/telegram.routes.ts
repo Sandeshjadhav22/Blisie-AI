@@ -4,10 +4,8 @@ import type { Update } from '@grammyjs/types';
 import { Router } from 'express';
 
 import { env } from '../../config/env.js';
-import { getAuthUser, requireAuth } from '../../middleware/require-auth.js';
 import { AppError, UnauthorizedError } from '../../utils/errors.js';
-import { getTelegramMode, isTelegramConfigured } from './telegram.client.js';
-import { createLinkCode, unlinkTelegram } from './telegram.linking.js';
+import { getTelegramMode } from './telegram.client.js';
 import { processUpdateSafely } from './telegram.runtime.js';
 
 export const telegramRouter = Router();
@@ -38,18 +36,4 @@ telegramRouter.post('/webhook', (req, res) => {
   if (typeof update.update_id === 'number') {
     void processUpdateSafely(update);
   }
-});
-
-/** Creates a one-time deep link the user opens to connect their Telegram account. */
-telegramRouter.post('/link', requireAuth, async (req, res) => {
-  if (!isTelegramConfigured()) {
-    throw new AppError(503, 'TELEGRAM_NOT_CONFIGURED', 'Telegram is not configured');
-  }
-  const { url, expiresAt } = await createLinkCode(getAuthUser(req));
-  res.status(201).json({ url, expiresAt: expiresAt.toISOString() });
-});
-
-telegramRouter.delete('/link', requireAuth, async (req, res) => {
-  await unlinkTelegram(getAuthUser(req));
-  res.status(204).end();
 });

@@ -2,7 +2,6 @@ import { env } from '../../../config/env.js';
 import { IntegrationModel, REAUTH_REQUIRED } from '../../../models/integration.model.js';
 import { type UserDocument, UserModel } from '../../../models/user.model.js';
 import { AppError } from '../../../utils/errors.js';
-import { escapeHtml } from '../../../utils/html.js';
 import {
   addDaysToDateString,
   dayRangeInTimezone,
@@ -47,16 +46,16 @@ async function today(user: UserDocument): Promise<OutgoingMessage[]> {
   if (visible.length === 0) return [{ text: 'Nothing on your calendar today. 🎉' }];
 
   const lines = visible.map((event) => {
-    const title = escapeHtml(event.summary || '(no title)');
-    if (event.allDay) return `🗓 All day — <b>${title}</b>`;
+    const title = event.summary || '(no title)';
+    if (event.allDay) return `🗓 All day — **${title}**`;
     const time = `${formatTime(event.start, user.timezone)}–${formatTime(event.end, user.timezone)}`;
-    const meet = event.meetLink ? ` · <a href="${escapeHtml(event.meetLink)}">join</a>` : '';
-    const tentative = event.myResponseStatus === 'needsAction' ? ' <i>(not answered)</i>' : '';
-    return `${time} — <b>${title}</b>${tentative}${meet}`;
+    const meet = event.meetLink ? ` · [join](${event.meetLink})` : '';
+    const tentative = event.myResponseStatus === 'needsAction' ? ' _(not answered)_' : '';
+    return `${time} — **${title}**${tentative}${meet}`;
   });
   const timed = visible.filter((event) => !event.allDay).length;
-  const heading = `📅 <b>${timed} meeting${timed === 1 ? '' : 's'} today</b>`;
-  return [{ text: `${heading}\n\n${lines.join('\n')}`, format: 'html' }];
+  const heading = `📅 **${timed} meeting${timed === 1 ? '' : 's'} today**`;
+  return [{ text: `${heading}\n\n${lines.join('\n')}`, format: 'markdown' }];
 }
 
 /** `/free [today|tomorrow|YYYY-MM-DD]` — "Find a time to meet tomorrow." */

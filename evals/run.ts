@@ -49,7 +49,8 @@ async function seed(testCase: EvalCase) {
     email: 'sandesh@example.com',
     googleId: 'eval',
     timezone: TZ,
-    telegramId: '1',
+    channels: [{ type: 'telegram', externalId: '1', key: 'telegram:1', linkedAt: NOW }],
+    primaryChannel: 'telegram',
   });
   await IntegrationModel.create({
     userId: user._id,

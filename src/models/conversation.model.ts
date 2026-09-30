@@ -1,14 +1,14 @@
 import { type HydratedDocument, type InferSchemaType, model, Schema } from 'mongoose';
 
-export const CHANNELS = ['telegram', 'web'] as const;
+export const CHANNELS = ['telegram', 'whatsapp', 'web'] as const;
 export type Channel = (typeof CHANNELS)[number];
 
-/** One ongoing thread per user per chat on a channel (e.g. the user's private Telegram chat). */
+/** One ongoing thread per user per chat on a channel (e.g. their Telegram or WhatsApp chat). */
 const conversationSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     channel: { type: String, enum: CHANNELS, required: true },
-    // The chat's ID on the channel (Telegram chat_id).
+    // The chat's ID on the channel (Telegram chat_id, WhatsApp wa_id).
     externalChatId: { type: String, required: true },
     lastMessageAt: { type: Date },
   },

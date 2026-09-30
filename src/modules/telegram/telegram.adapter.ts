@@ -1,33 +1,28 @@
-import type { Update } from '@grammyjs/types';
+import type { CallbackQuery, Update } from '@grammyjs/types';
 
-import { env } from '../../config/env.js';
-import { UserModel } from '../../models/user.model.js';
 import { logger } from '../../utils/logger.js';
+import { handleApprovalTap } from '../actions/approvals.js';
+import { attachChannelMessage } from '../actions/actions.service.js';
+import { consumeLinkCode, findOrCreateChatUser, linkReply } from '../channels/channels.service.js';
+import { type ChannelAdapter, registerChannel } from '../channels/registry.js';
 import type { OutgoingMessage } from '../conversations/channel.types.js';
 import { getOrCreateConversation } from '../conversations/conversations.service.js';
 import { handleIncomingMessage } from '../conversations/message-handler.js';
 import { parseCommand } from '../conversations/responder.js';
-import { callTelegram, TelegramApiError } from './telegram.client.js';
+import { callTelegram, isTelegramConfigured, TelegramApiError } from './telegram.client.js';
 import { markdownToTelegramHtml } from './telegram.format.js';
-import { handleCallbackQuery } from './telegram.approvals.js';
-import { consumeLinkCode, type LinkResult } from './telegram.linking.js';
-import { attachTelegramMessage } from '../actions/actions.service.js';
 
 /**
- * Telegram channel adapter: turns a Telegram update into an IncomingMessage for the shared message
- * handler, and sends the replies back. All Telegram-specific logic lives here, not in the agent.
+ * Telegram channel adapter: turns Telegram updates into IncomingMessages for the shared message
+ * handler, and sends messages back. All Telegram-specific logic lives here.
  */
 
 // Telegram rejects messages over 4096 characters.
 const MAX_MESSAGE_LENGTH = 4096;
 
-/** Sends a reply and returns Telegram's id for it. */
-export async function sendTelegramMessage(
-  chatId: number,
-  message: OutgoingMessage,
-): Promise<number> {
-  const html = message.format === 'markdown' ? markdownToTelegramHtml(message.text) : message.text;
-  const isHtml = message.format === 'html' || message.format === 'markdown';
+function render(message: OutgoingMessage) {
+  const isHtml = message.format === 'markdown';
+  const html = isHtml ? markdownToTelegramHtml(message.text) : message.text;
   const text =
     html.length > MAX_MESSAGE_LENGTH ? `${html.slice(0, MAX_MESSAGE_LENGTH - 1)}…` : html;
   const replyMarkup = message.buttons
@@ -39,6 +34,15 @@ export async function sendTelegramMessage(
         },
       }
     : {};
+  return { isHtml, text, replyMarkup };
+}
+
+/** Sends a message to a chat and returns Telegram's id for it. */
+export async function sendTelegramMessage(
+  chatId: number | string,
+  message: OutgoingMessage,
+): Promise<number> {
+  const { isHtml, text, replyMarkup } = render(message);
   try {
     const sent = await callTelegram('sendMessage', {
       chat_id: chatId,
@@ -63,19 +67,54 @@ export async function sendTelegramMessage(
   }
 }
 
-function onboardingLink(): string {
-  return new URL('/onboarding', env.FRONTEND_URL).toString();
+let botUsername: string | undefined;
+
+/** The bot's @username (without the @), fetched once. Needed to build t.me deep links. */
+async function getBotUsername(): Promise<string> {
+  if (!botUsername) {
+    const me = await callTelegram('getMe', undefined);
+    botUsername = me.username;
+  }
+  return botUsername;
 }
 
-function linkReply(result: LinkResult): string {
-  switch (result.status) {
-    case 'linked':
-      return `You're connected, ${result.user.name.split(' ')[0] ?? ''}! Send me a message to try it out, or /help to see what I can do.`;
-    case 'invalid_code':
-      return `That link has expired. Open ${onboardingLink()} and tap "Connect Telegram" again.`;
-    case 'already_linked_elsewhere':
-      return 'This Telegram account is already connected to a different account. Disconnect it there first.';
-  }
+export const telegramChannel: ChannelAdapter = {
+  channel: 'telegram',
+  isConfigured: isTelegramConfigured,
+  // Opening t.me/<bot>?start=<code> makes Telegram send us `/start <code>` from their account.
+  async linkUrl(code) {
+    return `https://t.me/${await getBotUsername()}?start=${code}`;
+  },
+  async chatUrl() {
+    return `https://t.me/${await getBotUsername()}`;
+  },
+  // In a private chat the chat id is the user's id.
+  async send(externalId, message) {
+    return String(await sendTelegramMessage(externalId, message));
+  },
+  async edit(externalId, messageId, message) {
+    const { isHtml, text } = render(message);
+    await callTelegram('editMessageText', {
+      chat_id: externalId,
+      message_id: Number(messageId),
+      text,
+      ...(isHtml ? { parse_mode: 'HTML' } : {}),
+      link_preview_options: { is_disabled: true },
+      reply_markup: { inline_keyboard: [] },
+    });
+  },
+};
+
+export function registerTelegramChannel(): void {
+  registerChannel(telegramChannel);
+}
+
+async function handleCallbackQuery(query: CallbackQuery): Promise<void> {
+  const result = await handleApprovalTap('telegram', String(query.from.id), query.data ?? '');
+  await callTelegram('answerCallbackQuery', {
+    callback_query_id: query.id,
+    text: result?.toast ?? '',
+  }).catch(() => undefined);
 }
 
 export async function handleTelegramUpdate(update: Update): Promise<void> {
@@ -93,7 +132,11 @@ export async function handleTelegramUpdate(update: Update): Promise<void> {
 
   // `/start <code>` from the deep link in the web app links the account.
   if (command?.name === 'start' && command.args) {
-    const result = await consumeLinkCode(command.args, telegramUser);
+    const result = await consumeLinkCode(command.args, {
+      channel: 'telegram',
+      externalId: telegramUser.id,
+      username: telegramUser.username,
+    });
     await sendTelegramMessage(chatId, { text: linkReply(result) });
     logger.info(
       { telegramUserId: telegramUser.id, status: result.status },
@@ -102,13 +145,12 @@ export async function handleTelegramUpdate(update: Update): Promise<void> {
     return;
   }
 
-  const user = await UserModel.findOne({ telegramId: telegramUser.id });
-  if (!user) {
-    await sendTelegramMessage(chatId, {
-      text: `Hi! To use this assistant, connect your account first: ${onboardingLink()}`,
-    });
-    return;
-  }
+  // Someone new gets an account straight away; the message handler sends them the setup link.
+  const displayName = [message.from.first_name, message.from.last_name].filter(Boolean).join(' ');
+  const { user } = await findOrCreateChatUser(
+    { channel: 'telegram', externalId: telegramUser.id, username: telegramUser.username },
+    displayName,
+  );
 
   const conversation = await getOrCreateConversation(user._id, 'telegram', String(chatId));
 
@@ -126,6 +168,12 @@ export async function handleTelegramUpdate(update: Update): Promise<void> {
 
   for (const reply of replies ?? []) {
     const messageId = await sendTelegramMessage(chatId, reply);
-    if (reply.actionId) await attachTelegramMessage(reply.actionId, String(chatId), messageId);
+    if (reply.actionId) {
+      await attachChannelMessage(reply.actionId, {
+        channel: 'telegram',
+        chatId: String(chatId),
+        messageId: String(messageId),
+      });
+    }
   }
 }

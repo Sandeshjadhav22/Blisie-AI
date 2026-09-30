@@ -4,6 +4,9 @@ import { createApp } from './app.js';
 import { SHUTDOWN_TIMEOUT_MS } from './config/constants.js';
 import { env } from './config/env.js';
 import { closeQueues } from './jobs/queues.js';
+import { HandoffModel } from './models/handoff.model.js';
+import { migrateLegacyTelegramFields } from './modules/channels/channels.service.js';
+import { migrateUserEmailIndex } from './modules/users/users.service.js';
 import { startTelegram } from './modules/telegram/telegram.runtime.js';
 import { connectDatabase, disconnectDatabase } from './services/database.js';
 import { connectRedis, disconnectRedis } from './services/redis.js';
@@ -15,6 +18,10 @@ let shuttingDown = false;
 
 async function start(): Promise<void> {
   await Promise.all([connectDatabase(), connectRedis()]);
+  await migrateLegacyTelegramFields();
+  await migrateUserEmailIndex();
+  // Chat links are looked up by token hash and old ones expire away; needed in production too.
+  await HandoffModel.createIndexes();
 
   const app = createApp();
   server = app.listen(env.PORT, () => {

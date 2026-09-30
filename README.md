@@ -33,7 +33,42 @@ openssl rand -base64 32     # ENCRYPTION_KEY (must be 32 bytes; share it with th
 `gmail.readonly`, `gmail.compose` and `gmail.send` are _restricted_ scopes: fine for test users, but going public needs Google's
 verification and a security assessment. Plan for that before launch.
 
-## Telegram setup
+## Chat apps (Telegram today, WhatsApp ready)
+
+The assistant talks through **chat apps**. Each is an adapter that turns the app's messages into
+an `IncomingMessage` and sends replies back; everything after it (agent, tools, approvals,
+commands) is shared:
+
+```
+Telegram / WhatsApp adapter → IncomingMessage → message handler → responder → agent
+worker jobs ──────────────────────────────────→ notifier → user's primary chat app
+```
+
+- **Identity**: `user.channels` lists the linked apps (`type`, `externalId`, `username`,
+  `lastInboundAt`) and `user.primaryChannel` says where messages go. Linking is the same for every
+  app: the web app asks for a one-time code (`POST /channels/:channel/link`), the user sends it
+  from the app, the adapter calls `consumeLinkCode`. The newest linked app becomes primary.
+- **Rules per app** live in one place, `modules/channels/policy.ts` (copied in the worker):
+
+  |                                                          | Telegram          | WhatsApp                                                                                                |
+  | -------------------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------- |
+  | Replies, approvals                                       | ✅                | ✅ (always within 24 h of the user's message)                                                           |
+  | Reminders                                                | ✅                | ✅ on time if the user wrote in the last 24 h; otherwise via a template, or held for their next message |
+  | Morning briefing, email alerts, follow-up/promise nudges | ✅                | ❌ off: WhatsApp only answers                                                                           |
+  | Approval outcome                                         | edits the message | new message                                                                                             |
+
+- **Formatting**: everything is written once in light Markdown; each adapter converts it
+  (Telegram HTML, WhatsApp `*bold*` / `_italic_`) and escapes the rest.
+- **Held messages** (`outbox` collection) go out with the reply to the user's next message.
+- **Moving to WhatsApp** is configuration: set the WhatsApp keys below, users press
+  "Connect WhatsApp" once, and it becomes their primary app. To drop Telegram, unset
+  `TELEGRAM_BOT_TOKEN`.
+- Accounts from before channels existed (`telegramId`) are moved to `channels` automatically at
+  startup (`migrateLegacyTelegramFields`, idempotent).
+
+Commands: `/today`, `/free`, `/inbox`, `/tasks`, `/promises`, `/waiting`, `/briefing`, `/help`.
+
+### Telegram setup
 
 1. Message [@BotFather](https://t.me/BotFather) → `/newbot`, and put the token in `.env` as
    `TELEGRAM_BOT_TOKEN`.
@@ -45,11 +80,28 @@ verification and a security assessment. Plan for that before launch.
 In production set `TELEGRAM_MODE=webhook`, `PUBLIC_API_URL` and `TELEGRAM_WEBHOOK_SECRET`. The API
 registers `POST /api/v1/telegram/webhook` on startup, and Telegram signs each call with the secret.
 
-Messages flow **Telegram adapter → `IncomingMessage` → message handler → responder**. The adapter
-is the only Telegram-specific code, so WhatsApp or web chat can reuse everything after it. The
-responder handles slash commands and sends everything else to the agent. Commands: `/today`,
-`/free`, `/inbox`, `/tasks`, `/promises`, `/waiting`, `/briefing`, `/help`. Approval buttons
-arrive as Telegram `callback_query` updates.
+### WhatsApp setup (Meta Cloud API)
+
+1. At [developers.facebook.com](https://developers.facebook.com) create an app (type
+   **Business**) and add **WhatsApp**. Under WhatsApp → **API Setup**, note the **Phone number
+   ID**, and create a permanent token (Business settings → System users → Generate token with
+   `whatsapp_business_messaging`).
+2. In `.env`: `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_BUSINESS_NUMBER`
+   (digits with country code), `WHATSAPP_APP_SECRET` (App settings → Basic) and a
+   `WHATSAPP_VERIFY_TOKEN` of your choice. All five turn WhatsApp on; with none, it's off.
+3. WhatsApp → **Configuration** → Webhook: URL `<PUBLIC_API_URL>/api/v1/whatsapp/webhook`, the
+   same verify token, and subscribe to **messages**. Meta needs a public HTTPS URL (use a tunnel
+   such as ngrok in development).
+4. In the web app, Settings → Integrations → **Connect WhatsApp** opens `wa.me/<number>` with
+   `link <code>` typed in; sending it links the account.
+5. Optional, for on-time reminders outside the 24-hour window: create a **Utility** template with
+   one body variable (e.g. "⏰ Reminder: {{1}}"), get it approved, and set
+   `WHATSAPP_REMINDER_TEMPLATE` (and `WHATSAPP_TEMPLATE_LANGUAGE`) in the **worker**'s `.env`.
+   Each template message is charged by Meta; without one, late reminders wait for the user's
+   next message instead.
+
+Every webhook call is checked against `X-Hub-Signature-256` (HMAC of the raw body with the app
+secret); unsigned or forged calls get 401.
 
 ## Gmail
 
@@ -61,7 +113,7 @@ arrive as Telegram `callback_query` updates.
 - Access tokens refresh automatically. If Google revokes the grant, the integration is flagged
   `needsReconnect` and the web app shows a Reconnect button.
 - Disconnecting Google deletes all synced email.
-- In Telegram, `/inbox` lists today's email (in the user's timezone).
+- In chat, `/inbox` lists today's email (in the user's timezone).
 
 ## Commitments
 
@@ -72,7 +124,7 @@ The promises people make: "I'll send the proposal by Friday".
   Each item is read once (a `commitmentScannedAt` marker), batched into few model calls, and
   capped per sweep, so the cost stays predictable.
 - Commitments are deduplicated per source message, so re-scanning can't create copies.
-- The worker **nudges** on Telegram when something is nearly due or overdue, once per promise.
+- The worker **nudges** in the chat app when something is nearly due or overdue, once per promise (not on WhatsApp).
 - In chat: `/promises`, or just ask ("what did I promise people this week?", "what am I
   forgetting?"). The agent can also record, complete and drop promises.
 - Disconnecting Google keeps the promises but deletes the quoted email text.
@@ -84,7 +136,7 @@ Plain messages go to the agent (`src/modules/agent`); slash commands skip it.
 ```
 message → context (memories, connected services, last 16 turns)
         → LLM ⇄ tool calls (validated with zod, executed by us, max 6 steps)
-        → reply (light Markdown, rendered to Telegram HTML by the adapter)
+        → reply (light Markdown, rendered for each chat app by its adapter)
 ```
 
 - **LLM interface** (`agent/llm/types.ts`) is provider-agnostic. `GeminiProvider` (default model
@@ -99,7 +151,7 @@ message → context (memories, connected services, last 16 turns)
 - **Safety**: tool arguments are validated before running. Failures go back to the model as
   messages, not exceptions. Email/event text is treated as data, not instructions. Every
   reply stores which tools ran, the model and token usage in the message's metadata.
-- **Reminders** are stored, then delivered by the worker on Telegram at the due time.
+- **Reminders** are stored, then delivered by the worker in the user's chat app at the due time.
 
 ### Permissions and approvals
 
@@ -115,9 +167,10 @@ instruction hidden in an email can skip it.
 | `DESTRUCTIVE`     | cancel an event                               | **asks** | ask / never (never runs on its own) |
 
 - "Ask" stores the call as a pending `Action` and the reply comes with **Yes / No** buttons on
-  Telegram (also on the web Activity page). Requests expire after an hour.
+  the chat app (also on the web Activity page). Requests expire after an hour.
 - Approval claims the action atomically (a double tap can't run it twice), re-validates the
-  arguments and checks the policy again, then runs it and edits the Telegram message with the
+  arguments and checks the policy again, then runs it and shows the outcome in the chat (edited
+  in place where the app allows) with the
   outcome. The outcome is also written into the conversation so the agent knows what happened.
 - Every non-READ call — run, approved, declined, expired or blocked — is in the `actions`
   collection: the audit log behind `GET /actions` and the Activity page.
@@ -131,7 +184,7 @@ instruction hidden in an email can skip it.
 - **Daily briefing** at each user's briefing time: meetings, email that needs attention, promises
   and tasks due, who they're waiting on. `/briefing` or the dashboard sends one on demand.
 - **Important email**: the worker triages new inbox mail (`priority` high/normal/low plus a short
-  reason) and alerts on Telegram about `high` ones, never overnight.
+  reason) and alerts about `high` ones in the chat app (not WhatsApp), never overnight.
 - **Follow-ups** ("who am I waiting for?"): threads where the user wrote last and nobody answered
   for 3 days, plus promises people made to the user. `/waiting`, `get_waiting_on`, and a nudge
   during working hours. Replies close them automatically.
@@ -165,7 +218,7 @@ model change; `pnpm eval reminder` runs a subset.
   emailed only when the event has guests. Moving only the start keeps the duration ("move my 3 PM
   to 4").
 - **Google Tasks** are read and written live on the default list.
-- Telegram: `/today` (meetings), `/free [today|tomorrow|YYYY-MM-DD]`, `/tasks`.
+- In chat: `/today` (meetings), `/free [today|tomorrow|YYYY-MM-DD]`, `/tasks`.
 - Calling a feature that isn't connected returns `409 GOOGLE_FEATURE_NOT_CONNECTED` with a
   "Connect … in Settings" message.
 
@@ -208,9 +261,12 @@ model change; `pnpm eval reminder` runs a subset.
 | `GET /integrations`                                                                                         | ✓      | Connected services (never includes tokens)                  |
 | `GET /integrations/google/connect?features=&returnTo=`                                                      | cookie | Redirects to Google to grant feature scopes                 |
 | `DELETE /integrations/google`                                                                               | ✓      | Revokes the grant at Google and deletes the tokens          |
-| `POST /telegram/link`                                                                                       | ✓      | One-time `t.me` deep link for connecting Telegram           |
-| `DELETE /telegram/link`                                                                                     | ✓      | Disconnects Telegram                                        |
+| `GET /channels`                                                                                             | ✓      | Chat apps offered, linked, and the primary one              |
+| `POST /channels/:channel/link`                                                                              | ✓      | One-time link (`t.me` / `wa.me`) that connects a chat app   |
+| `DELETE /channels/:channel`                                                                                 | ✓      | Disconnect a chat app                                       |
+| `PUT /channels/primary`                                                                                     | ✓      | Choose which linked app gets messages                       |
 | `POST /telegram/webhook`                                                                                    | secret | Telegram updates (webhook mode)                             |
+| `GET/POST /whatsapp/webhook`                                                                                | signed | WhatsApp verification and messages (Meta Cloud API)         |
 | `GET /conversations`                                                                                        | ✓      | The user's conversations                                    |
 | `GET /conversations/:id/messages?limit=&before=`                                                            | ✓      | Messages, newest first                                      |
 | `GET /emails?q=&from=&after=&before=&today=&unread=&important=&priority=&needsAttention=&inboxOnly=&limit=` | ✓      | Search synced email                                         |
@@ -226,7 +282,7 @@ model change; `pnpm eval reminder` runs a subset.
 | `GET /tasks?includeCompleted=`                                                                              | ✓      | Google Tasks (default list)                                 |
 | `POST /tasks`, `PATCH /tasks/:id`, `POST /tasks/:id/complete`                                               | ✓      | Create, update, complete                                    |
 | `GET /reminders?status=pending\|all`                                                                        | ✓      | Reminders                                                   |
-| `POST /reminders`                                                                                           | ✓      | Create (`text`, `dueAt` ISO) — delivered on Telegram        |
+| `POST /reminders`                                                                                           | ✓      | Create (`text`, `dueAt` ISO) — delivered in the chat app    |
 | `DELETE /reminders/:id`                                                                                     | ✓      | Cancel a pending reminder                                   |
 | `GET /memories`, `POST /memories`, `PATCH /memories/:id`, `DELETE /memories/:id`                            | ✓      | Remembered facts                                            |
 | `GET /commitments?status=&direction=&person=&dueWithinDays=&sinceDays=`                                     | ✓      | Promises                                                    |
@@ -234,7 +290,7 @@ model change; `pnpm eval reminder` runs a subset.
 | `PATCH /commitments/:id`                                                                                    | ✓      | Complete, cancel or edit                                    |
 | `GET /follow-ups?status=`, `PATCH /follow-ups/:id`                                                          | ✓      | Unanswered sent email; close or reopen                      |
 | `GET /briefing`                                                                                             | ✓      | Live briefing numbers, last and next briefing               |
-| `POST /briefing/send`                                                                                       | ✓      | Send today's briefing to Telegram now                       |
+| `POST /briefing/send`                                                                                       | ✓      | Send today's briefing to the chat app now                   |
 | `GET /actions?status=&before=&limit=`                                                                       | ✓      | Activity log (audit), newest first                          |
 | `POST /actions/:id/approve`, `POST /actions/:id/reject`                                                     | ✓      | Answer a pending approval from the web                      |
 | `GET /openapi.json`                                                                                         | –      | OpenAPI 3.1 spec                                            |
@@ -253,7 +309,7 @@ src/
   routes.ts           /api/v1 router — modules register here
   config/             env validation (zod), constants, queue names
   middleware/         error handler, request logger, zod validation
-  modules/            feature modules (auth, users, telegram, integrations, agent, …)
+  modules/            feature modules (auth, users, channels, telegram, whatsapp, agent, …)
   models/             mongoose models (User, Integration, Conversation, Message, Email, CalendarEvent)
   services/           database, redis
   jobs/               BullMQ queue producers

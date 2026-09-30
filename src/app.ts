@@ -27,7 +27,15 @@ export function createApp(): Express {
     }),
   );
   app.use(compression());
-  app.use(express.json({ limit: REQUEST_BODY_LIMIT }));
+  app.use(
+    express.json({
+      limit: REQUEST_BODY_LIMIT,
+      // Webhook signatures (WhatsApp) are computed over the exact bytes received.
+      verify: (req, _res, buffer) => {
+        (req as Express.Request).rawBody = buffer;
+      },
+    }),
+  );
   app.use(express.urlencoded({ extended: false, limit: REQUEST_BODY_LIMIT }));
   app.use(cookieParser());
   if (!isTest) {

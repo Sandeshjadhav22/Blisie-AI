@@ -1,5 +1,7 @@
 import { type HydratedDocument, type InferSchemaType, model, Schema } from 'mongoose';
 
+import { CHAT_CHANNELS } from '../modules/channels/policy.js';
+
 /**
  * The audit log: every non-READ tool call the agent made or proposed, and what became of it.
  * A call that needs the user's approval is stored `pending` and runs only once they approve it.
@@ -22,8 +24,9 @@ export type ActionStatus = (typeof ACTION_STATUSES)[number];
 
 export const ACTION_RISKS = ['READ', 'WRITE', 'EXTERNAL_ACTION', 'DESTRUCTIVE'] as const;
 
-/** How a decision was made: by the policy, or by the user tapping a button. */
-export const ACTION_DECIDERS = ['policy', 'telegram', 'web'] as const;
+/** How a decision was made: by the policy, on the web, or with a chat app's buttons. */
+export const ACTION_DECIDERS = ['policy', 'web', ...CHAT_CHANNELS] as const;
+export type ActionDecider = (typeof ACTION_DECIDERS)[number];
 
 const actionSchema = new Schema(
   {
@@ -44,10 +47,11 @@ const actionSchema = new Schema(
     error: { type: String },
     /** Pending approvals lapse after this, so a stale "Yes" can't send last week's email. */
     expiresAt: { type: Date },
-    /** The Telegram message with the Yes/No buttons, so it can be updated once decided. */
-    telegram: {
+    /** The chat message with the Yes/No buttons, so it can be updated once decided. */
+    channelMessage: {
+      channel: { type: String, enum: CHAT_CHANNELS },
       chatId: { type: String },
-      messageId: { type: Number },
+      messageId: { type: String },
     },
   },
   // Keep `{}` arguments as `{}` rather than dropping the field.

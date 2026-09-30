@@ -53,7 +53,7 @@ function sentTexts(): string[] {
 }
 
 async function linkTelegram(cookie: string): Promise<string> {
-  const res = await request(app).post('/api/v1/telegram/link').set('Cookie', cookie);
+  const res = await request(app).post('/api/v1/channels/telegram/link').set('Cookie', cookie);
   expect(res.status).toBe(201);
   const code = new URL(res.body.url as string).searchParams.get('start');
   expect(code).toBeTruthy();
@@ -88,26 +88,36 @@ describe('parseCommand', () => {
 
 describe('Telegram linking', () => {
   it('requires a session to create a link', async () => {
-    expect((await request(app).post('/api/v1/telegram/link')).status).toBe(401);
+    expect((await request(app).post('/api/v1/channels/telegram/link')).status).toBe(401);
   });
 
   it('links the Telegram account from the deep link', async () => {
     const { user, cookie } = await createSignedInUser();
 
-    const res = await request(app).post('/api/v1/telegram/link').set('Cookie', cookie);
+    const res = await request(app).post('/api/v1/channels/telegram/link').set('Cookie', cookie);
     expect(res.body.url).toMatch(/^https:\/\/t\.me\/test_assistant_bot\?start=[\w-]{32}$/);
 
     const code = new URL(res.body.url as string).searchParams.get('start') ?? '';
     await handleTelegramUpdate(textUpdate(`/start ${code}`));
 
-    const linked = await UserModel.findById(user._id).select('+telegramLinkCodeHash');
-    expect(linked?.telegramId).toBe(String(TELEGRAM_USER_ID));
-    expect(linked?.telegramUsername).toBe('sandesh_j');
-    expect(linked?.telegramLinkCodeHash).toBeUndefined();
+    const linked = await UserModel.findById(user._id).select('+channelLinkCodeHash');
+    expect(linked?.channels).toEqual([
+      expect.objectContaining({
+        type: 'telegram',
+        externalId: String(TELEGRAM_USER_ID),
+        key: `telegram:${String(TELEGRAM_USER_ID)}`,
+        username: 'sandesh_j',
+      }),
+    ]);
+    expect(linked?.primaryChannel).toBe('telegram');
+    expect(linked?.channelLinkCodeHash).toBeUndefined();
     expect(sentTexts().at(-1)).toMatch(/You're connected, Sandesh/);
 
     const me = await request(app).get('/api/v1/users/me').set('Cookie', cookie);
-    expect(me.body.user).toMatchObject({ telegramLinked: true, telegramUsername: 'sandesh_j' });
+    expect(me.body.user).toMatchObject({
+      channels: [{ type: 'telegram', username: 'sandesh_j' }],
+      primaryChannel: 'telegram',
+    });
   });
 
   it('rejects a code that was already used', async () => {
@@ -116,18 +126,18 @@ describe('Telegram linking', () => {
 
     await handleTelegramUpdate(textUpdate(`/start ${code}`, 111));
     expect(sentTexts().at(-1)).toMatch(/expired/);
-    expect(await UserModel.countDocuments({ telegramId: '111' })).toBe(0);
+    expect(await UserModel.countDocuments({ 'channels.key': 'telegram:111' })).toBe(0);
   });
 
   it('rejects an expired code', async () => {
     const { user, cookie } = await createSignedInUser();
-    const res = await request(app).post('/api/v1/telegram/link').set('Cookie', cookie);
-    await UserModel.updateOne({ _id: user._id }, { telegramLinkCodeExpiresAt: new Date(0) });
+    const res = await request(app).post('/api/v1/channels/telegram/link').set('Cookie', cookie);
+    await UserModel.updateOne({ _id: user._id }, { channelLinkCodeExpiresAt: new Date(0) });
 
     const code = new URL(res.body.url as string).searchParams.get('start') ?? '';
     await handleTelegramUpdate(textUpdate(`/start ${code}`));
     expect(sentTexts().at(-1)).toMatch(/expired/);
-    expect((await UserModel.findById(user._id))?.telegramId).toBeUndefined();
+    expect((await UserModel.findById(user._id))?.channels).toEqual([]);
   });
 
   it("won't link a Telegram account that belongs to someone else", async () => {
@@ -136,27 +146,27 @@ describe('Telegram linking', () => {
 
     await linkTelegram(cookie);
     expect(sentTexts().at(-1)).toMatch(/already connected to a different account/);
-    expect((await UserModel.findById(user._id))?.telegramId).toBeUndefined();
+    expect((await UserModel.findById(user._id))?.channels).toEqual([]);
   });
 
   it('unlinks', async () => {
     const { user, cookie } = await createSignedInUser();
     await linkTelegram(cookie);
 
-    expect((await request(app).delete('/api/v1/telegram/link').set('Cookie', cookie)).status).toBe(
-      204,
-    );
-    expect((await UserModel.findById(user._id))?.telegramId).toBeUndefined();
+    expect(
+      (await request(app).delete('/api/v1/channels/telegram').set('Cookie', cookie)).status,
+    ).toBe(204);
+    const unlinked = await UserModel.findById(user._id);
+    expect(unlinked?.channels).toEqual([]);
+    expect(unlinked?.primaryChannel).toBeUndefined();
   });
 });
 
 describe('Telegram messages', () => {
-  it('asks unknown Telegram users to connect first and stores nothing', async () => {
+  it('gives unknown Telegram users an account and a setup link (see chat-onboarding.test.ts)', async () => {
     await handleTelegramUpdate(textUpdate('hello'));
-    expect(sentTexts()).toEqual([
-      'Hi! To use this assistant, connect your account first: http://localhost:3000/onboarding',
-    ]);
-    expect(await MessageModel.countDocuments()).toBe(0);
+    expect(sentTexts()[0]).toContain('http://localhost:3000/welcome?t=');
+    expect(await UserModel.countDocuments()).toBe(1);
   });
 
   it('echoes and stores both sides of the conversation', async () => {

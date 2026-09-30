@@ -1,5 +1,4 @@
 import { UserModel } from '../../models/user.model.js';
-import { escapeHtml } from '../../utils/html.js';
 import { formatDateTime } from '../../utils/time.js';
 import { registerCommand } from '../conversations/responder.js';
 import { whoAmIWaitingOn } from './follow-ups.service.js';
@@ -23,21 +22,21 @@ export function registerFollowUpCommands(): void {
         const who = commitment.person?.name ?? commitment.person?.email ?? 'Someone';
         const late = commitment.dueAt && commitment.dueAt < now;
         const due = commitment.dueAt
-          ? ` <i>(${late ? 'was due' : 'due'} ${formatDateTime(commitment.dueAt, user.timezone, 'short')})</i>`
+          ? ` _(${late ? 'was due' : 'due'} ${formatDateTime(commitment.dueAt, user.timezone, 'short')})_`
           : '';
-        return `${late ? '🔴' : '•'} <b>${escapeHtml(who)}</b>: ${escapeHtml(commitment.description)}${due}`;
+        return `${late ? '🔴' : '•'} **${who}**: ${commitment.description}${due}`;
       });
-      sections.push(`🤝 <b>Promised to you</b>\n${lines.join('\n')}`);
+      sections.push(`🤝 **Promised to you**\n${lines.join('\n')}`);
     }
     if (followUps.length > 0) {
       const lines = followUps.slice(0, MAX_LISTED).map((followUp) => {
         const to = followUp.to[0];
         const who = to?.name ?? to?.email ?? 'them';
         const days = Math.floor((now.getTime() - followUp.sentAt.getTime()) / 86_400_000);
-        return `• <b>${escapeHtml(who)}</b>: “${escapeHtml(followUp.subject || '(no subject)')}” <i>(${String(days)} days, no reply)</i>`;
+        return `• **${who}**: “${followUp.subject || '(no subject)'}” _(${String(days)} days, no reply)_`;
       });
-      sections.push(`📭 <b>No reply yet</b>\n${lines.join('\n')}`);
+      sections.push(`📭 **No reply yet**\n${lines.join('\n')}`);
     }
-    return [{ text: sections.join('\n\n'), format: 'html' }];
+    return [{ text: sections.join('\n\n'), format: 'markdown' }];
   });
 }

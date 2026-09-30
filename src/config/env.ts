@@ -52,6 +52,24 @@ const envSchema = z.object({
   // `polling` for local dev (no public URL needed), `webhook` in production.
   TELEGRAM_MODE: z.enum(['webhook', 'polling', 'off']).optional(),
 
+  // WhatsApp (Meta Cloud API). Without an access token the WhatsApp channel is off.
+  WHATSAPP_ACCESS_TOKEN: z.string().optional(),
+  // The business phone number's id (not the number itself), from WhatsApp → API Setup.
+  WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
+  // The business number in international format, digits only (e.g. 919876543210), for wa.me links.
+  WHATSAPP_BUSINESS_NUMBER: z
+    .string()
+    .regex(/^\d{7,15}$/, { message: 'digits only, with country code, e.g. 919876543210' })
+    .optional(),
+  // The Meta app's secret: every webhook call is signed with it (X-Hub-Signature-256).
+  WHATSAPP_APP_SECRET: z.string().optional(),
+  // Any string you choose; Meta echoes it when you register the webhook URL.
+  WHATSAPP_VERIFY_TOKEN: z.string().optional(),
+  WHATSAPP_API_VERSION: z
+    .string()
+    .regex(/^v\d+\.\d+$/)
+    .default('v25.0'),
+
   // The agent. The provider sits behind an interface (modules/agent/llm) so it can be swapped.
   // Without an API key, plain messages get a "not configured" reply; slash commands still work.
   LLM_PROVIDER: z.enum(['gemini']).default('gemini'),
@@ -61,7 +79,23 @@ const envSchema = z.object({
 
 export type Env = z.infer<typeof envSchema>;
 
+const WHATSAPP_REQUIRED = [
+  'WHATSAPP_ACCESS_TOKEN',
+  'WHATSAPP_PHONE_NUMBER_ID',
+  'WHATSAPP_BUSINESS_NUMBER',
+  'WHATSAPP_APP_SECRET',
+  'WHATSAPP_VERIFY_TOKEN',
+] as const;
+
 function validateCrossFieldRules(value: Env, ctx: z.core.$RefinementCtx): void {
+  // WhatsApp is all or nothing: a half-configured channel would fail at runtime instead.
+  if (WHATSAPP_REQUIRED.some((key) => value[key])) {
+    for (const key of WHATSAPP_REQUIRED) {
+      if (!value[key]) {
+        ctx.addIssue({ code: 'custom', path: [key], message: 'required to turn WhatsApp on' });
+      }
+    }
+  }
   if (value.TELEGRAM_MODE === 'webhook') {
     for (const key of [
       'TELEGRAM_BOT_TOKEN',

@@ -7,6 +7,8 @@ declare global {
     interface Request {
       /** Set by the `requireAuth` middleware. */
       user?: UserDocument;
+      /** The exact JSON body bytes, for checking webhook signatures. */
+      rawBody?: Buffer;
     }
 
     interface Locals {

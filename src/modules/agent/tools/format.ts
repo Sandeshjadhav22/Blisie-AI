@@ -2,7 +2,7 @@ import { IntegrationModel, REAUTH_REQUIRED } from '../../../models/integration.m
 import type { UserDocument } from '../../../models/user.model.js';
 import { formatDateTime, zonedTimeToUtc } from '../../../utils/time.js';
 import { featuresFromScopes, type GoogleFeature } from '../../integrations/google/google.scopes.js';
-import { ToolError } from './types.js';
+import { FeatureMissingError, ToolError } from './types.js';
 
 /** "Tue 22 Sep, 3:00 PM" in the user's timezone — what the model reads and repeats. */
 export function formatLocal(date: Date, timeZone: string): string {
@@ -40,13 +40,15 @@ export async function requireFeature(
 ): Promise<void> {
   const integration = await IntegrationModel.findOne({ userId: user._id, provider: 'google' });
   if (!integration || !featuresFromScopes(integration.scopes)[feature]) {
-    throw new ToolError(
+    throw new FeatureMissingError(
       `${FEATURE_NAMES[feature]} isn't connected. The user can connect it in Settings → Integrations.`,
+      feature,
     );
   }
   if (integration.lastError === REAUTH_REQUIRED) {
-    throw new ToolError(
+    throw new FeatureMissingError(
       'Google access was revoked. The user needs to reconnect Google in Settings.',
+      feature,
     );
   }
   const syncedAt =

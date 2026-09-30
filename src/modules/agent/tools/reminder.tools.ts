@@ -6,7 +6,19 @@ import {
   listReminders,
 } from '../../reminders/reminders.service.js';
 import { formatLocal, LOCAL_DATE_TIME, localDateTimeToUtc } from './format.js';
-import { defineTool } from './types.js';
+import { primaryChannelOf } from '../../channels/channels.service.js';
+import { CHANNEL_RULES } from '../../channels/policy.js';
+import { defineTool, type ToolContext } from './types.js';
+
+/** Where and how the reminder will arrive, for the model to mention if it matters. */
+function reminderDelivery(user: ToolContext['user']): string {
+  const linked = primaryChannelOf(user);
+  if (!linked) return 'no chat app connected yet — tell them to connect one in Settings';
+  const rules = CHANNEL_RULES[linked.type];
+  return rules.sessionWindowMs === null
+    ? rules.name
+    : `${rules.name}: arrives on time if they've messaged you in the 24 hours before; otherwise with their next message. Mention this briefly.`;
+}
 
 export const createReminderTool = defineTool({
   name: 'create_reminder',
@@ -37,7 +49,7 @@ export const createReminderTool = defineTool({
       id: reminder.id,
       text: reminder.text,
       at: formatLocal(reminder.dueAt, user.timezone),
-      delivery: user.telegramId ? 'telegram' : 'telegram (not linked yet!)',
+      delivery: reminderDelivery(user),
     };
   },
 });

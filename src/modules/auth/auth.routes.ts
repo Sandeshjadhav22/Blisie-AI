@@ -8,6 +8,9 @@ import { isTest } from '../../config/env.js';
 import { enqueueCalendarSync } from '../../jobs/calendar-sync.js';
 import { enqueueEmailSync } from '../../jobs/email-sync.js';
 import { getAuthUser, requireAuth, resolveSessionUser } from '../../middleware/require-auth.js';
+import type { HandoffDocument } from '../../models/handoff.model.js';
+import { HandoffModel } from '../../models/handoff.model.js';
+import { type UserDocument, UserModel } from '../../models/user.model.js';
 import { AppError } from '../../utils/errors.js';
 import { logger } from '../../utils/logger.js';
 import {
@@ -18,7 +21,13 @@ import {
 } from '../integrations/google/google-oauth.js';
 import { featuresFromScopes, LOGIN_SCOPES } from '../integrations/google/google.scopes.js';
 import { saveGoogleIntegration } from '../integrations/integrations.service.js';
-import { revokeAllSessions, upsertUserFromGoogle } from '../users/users.service.js';
+import { claimHandoff } from '../handoff/handoff.service.js';
+import { resumeConversation } from '../handoff/resume.js';
+import {
+  adoptGoogleIdentity,
+  revokeAllSessions,
+  upsertUserFromGoogle,
+} from '../users/users.service.js';
 import {
   clearOAuthStateCookie,
   clearSessionCookie,
@@ -49,6 +58,7 @@ type AuthErrorCode =
   | 'email_unverified'
   | 'account_mismatch'
   | 'session_expired'
+  | 'link_expired'
   | 'oauth_failed';
 
 function safeEqual(a: string, b: string): boolean {
@@ -84,8 +94,13 @@ authRouter.get('/google/callback', async (req, res) => {
 
   const oauthState = stateToken ? await verifyOAuthState(stateToken) : null;
   // Sign-in errors go back to /login; connect errors go back to the page that started it.
+  // Connections started from a chat link report back on a page that points to the chat.
   const errorPath =
-    oauthState?.intent === 'connect' ? (oauthState.returnTo ?? '/settings/integrations') : '/login';
+    oauthState?.intent === 'connect'
+      ? oauthState.handoffId
+        ? '/connected'
+        : (oauthState.returnTo ?? '/settings/integrations')
+      : '/login';
   const fail = (code: AuthErrorCode) => {
     res.redirect(frontendUrl(errorPath, { error: code }));
   };
@@ -147,6 +162,25 @@ async function completeLogin(
   res.redirect(frontendUrl(destination));
 }
 
+/** Who is connecting: the signed-in user, or whoever the chat link was for. */
+async function connectingUser(
+  req: Request,
+  oauthState: Extract<OAuthState, { intent: 'connect' }>,
+): Promise<{ user: UserDocument; handoff: HandoffDocument | null } | null> {
+  if (!oauthState.handoffId) {
+    const user = await resolveSessionUser(req);
+    return user?.id === oauthState.userId ? { user, handoff: null } : null;
+  }
+  const handoff = await HandoffModel.findOne({
+    _id: oauthState.handoffId,
+    kind: 'google',
+    completedAt: null,
+  });
+  if (handoff?.userId.toString() !== oauthState.userId) return null;
+  const user = await UserModel.findById(oauthState.userId);
+  return user ? { user, handoff } : null;
+}
+
 async function completeConnect(
   req: Request,
   res: Response,
@@ -154,16 +188,25 @@ async function completeConnect(
   code: string,
   fail: (code: AuthErrorCode) => void,
 ): Promise<void> {
-  const user = await resolveSessionUser(req);
-  if (user?.id !== oauthState.userId) {
-    fail('session_expired');
+  const connecting = await connectingUser(req, oauthState);
+  if (!connecting) {
+    fail(oauthState.handoffId ? 'link_expired' : 'session_expired');
     return;
   }
+  const { handoff } = connecting;
+  let { user } = connecting;
 
   const { tokens, profile } = await exchangeCodeForTokens(code, oauthState.codeVerifier);
-  // Data access is scoped to the account the user signed in with, so there's never any doubt
-  // about whose inbox or calendar the assistant is reading.
-  if (profile.sub !== user.googleId) {
+  if (!user.googleId) {
+    // Started in a chat app: this Google account becomes theirs (or theirs is the one it's on).
+    if (!profile.emailVerified) {
+      fail('email_unverified');
+      return;
+    }
+    user = await adoptGoogleIdentity(user, profile);
+  } else if (profile.sub !== user.googleId) {
+    // Data access is scoped to the account the user signed in with, so there's never any doubt
+    // about whose inbox or calendar the assistant is reading.
     fail('account_mismatch');
     return;
   }
@@ -182,9 +225,28 @@ async function completeConnect(
     }
   }
   logger.info({ userId: user.id, features: oauthState.features }, 'Google features connected');
-  res.redirect(
-    frontendUrl(oauthState.returnTo ?? '/settings/integrations', { connected: 'google' }),
+
+  if (!handoff) {
+    res.redirect(
+      frontendUrl(oauthState.returnTo ?? '/settings/integrations', { connected: 'google' }),
+    );
+    return;
+  }
+
+  // From a chat link: sign this browser in too, send them back to the chat, and answer there.
+  setSessionCookie(
+    res,
+    await signSessionToken({ userId: user.id, sessionVersion: user.sessionVersion }),
   );
+  res.redirect(frontendUrl('/connected', { app: handoff.channel }));
+  if (await claimHandoff(handoff)) {
+    // Re-read: a merge may have moved it to another account.
+    const current = (await HandoffModel.findById(handoff._id)) ?? handoff;
+    void resumeConversation(current, {
+      withAnswer: 'Google is connected ✅',
+      alone: 'Google is connected ✅ Ask me about your email, calendar or tasks.',
+    });
+  }
 }
 
 authRouter.post('/logout', (_req, res) => {

@@ -1,6 +1,5 @@
 import type { UserDocument } from '../../models/user.model.js';
 import { UserModel } from '../../models/user.model.js';
-import { escapeHtml } from '../../utils/html.js';
 import { formatDateTime } from '../../utils/time.js';
 import type { OutgoingMessage } from '../conversations/channel.types.js';
 import { registerCommand } from '../conversations/responder.js';
@@ -21,17 +20,16 @@ async function promises(user: UserDocument): Promise<OutgoingMessage[]> {
   }
 
   const line = (text: string, due: Date | undefined, overdue: boolean) =>
-    `${overdue ? '🔴' : '•'} ${text}${due ? ` <i>(${formatDateTime(due, user.timezone, 'short')})</i>` : ''}`;
+    `${overdue ? '🔴' : '•'} ${text}${due ? ` _(${formatDateTime(due, user.timezone, 'short')})_` : ''}`;
   const sections: string[] = [];
   for (const direction of ['outgoing', 'incoming'] as const) {
     const items = commitments.filter((commitment) => commitment.direction === direction);
     if (items.length === 0) continue;
-    const heading =
-      direction === 'outgoing' ? '🤝 <b>You promised</b>' : '⏳ <b>Waiting on others</b>';
+    const heading = direction === 'outgoing' ? '🤝 **You promised**' : '⏳ **Waiting on others**';
     const lines = items.slice(0, MAX_LISTED).map((commitment) => {
       const who = commitment.person?.name ?? commitment.person?.email;
-      const what = escapeHtml(commitment.description);
-      const text = who ? `${escapeHtml(who)} — ${what}` : what;
+      const what = commitment.description;
+      const text = who ? `${who} — ${what}` : what;
       return line(
         text,
         commitment.dueAt ?? undefined,
@@ -40,7 +38,7 @@ async function promises(user: UserDocument): Promise<OutgoingMessage[]> {
     });
     sections.push(`${heading}\n${lines.join('\n')}`);
   }
-  return [{ text: sections.join('\n\n'), format: 'html' }];
+  return [{ text: sections.join('\n\n'), format: 'markdown' }];
 }
 
 export function registerCommitmentCommands(): void {
