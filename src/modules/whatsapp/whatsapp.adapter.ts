@@ -7,7 +7,12 @@ import { type ChannelAdapter, registerChannel } from '../channels/registry.js';
 import type { OutgoingMessage } from '../conversations/channel.types.js';
 import { getOrCreateConversation } from '../conversations/conversations.service.js';
 import { handleIncomingMessage } from '../conversations/message-handler.js';
-import { isWhatsAppConfigured, sendWhatsAppPayload } from './whatsapp.client.js';
+import {
+  isWhatsAppConfigured,
+  sendWhatsAppPayload,
+  sendWhatsAppReaction,
+  sendWhatsAppTypingIndicator,
+} from './whatsapp.client.js';
 import { markdownToWhatsApp } from './whatsapp.format.js';
 
 /**
@@ -120,6 +125,20 @@ async function handleMessage(message: WebhookMessage, profileName: string | unde
     return;
   }
   const text = message.text.body;
+
+  // First react with 👀 on the user's message, then show the typing indicator
+  void (async () => {
+    try {
+      await sendWhatsAppReaction(from, message.id, '👀');
+    } catch (err: unknown) {
+      logger.debug({ err, messageId: message.id }, 'Failed to send WhatsApp reaction');
+    }
+    try {
+      await sendWhatsAppTypingIndicator(message.id);
+    } catch (err: unknown) {
+      logger.debug({ err, messageId: message.id }, 'Failed to send WhatsApp typing indicator');
+    }
+  })();
 
   // "link <code>" from the prefilled message links the account.
   const link = LINK_MESSAGE.exec(text);

@@ -56,3 +56,48 @@ export async function sendWhatsAppPayload(payload: Record<string, unknown>): Pro
   }
   return body.messages[0].id;
 }
+
+/** Reacts to an existing WhatsApp message with an emoji (e.g. 👀). */
+export async function sendWhatsAppReaction(
+  to: string,
+  messageId: string,
+  emoji: string,
+): Promise<string> {
+  return sendWhatsAppPayload({
+    to,
+    type: 'reaction',
+    reaction: {
+      message_id: messageId,
+      emoji,
+    },
+  });
+}
+
+/** Marks the message as read and shows the typing indicator in WhatsApp. */
+export async function sendWhatsAppTypingIndicator(messageId: string): Promise<boolean> {
+  if (!isWhatsAppConfigured()) return false;
+  try {
+    const response = await fetch(
+      `https://graph.facebook.com/${env.WHATSAPP_API_VERSION}/${env.WHATSAPP_PHONE_NUMBER_ID ?? ''}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN ?? ''}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          status: 'read',
+          message_id: messageId,
+          typing_indicator: {
+            type: 'text',
+          },
+        }),
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    return response.ok;
+  } catch {
+    return false;
+  }
+}

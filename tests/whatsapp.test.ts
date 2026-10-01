@@ -64,11 +64,13 @@ afterEach(() => {
 });
 
 function texts(): string[] {
-  return sent.map((payload) =>
-    payload.type === 'text'
-      ? (payload.text as { body: string }).body
-      : (payload.interactive as { body: { text: string } }).body.text,
-  );
+  return sent
+    .filter((payload) => payload.type === 'text' || payload.type === 'interactive')
+    .map((payload) =>
+      payload.type === 'text'
+        ? (payload.text as { body: string }).body
+        : (payload.interactive as { body: { text: string } }).body.text,
+    );
 }
 
 function inbound(message: Omit<WebhookMessage, 'from' | 'id'>, from = WA_ID): WhatsAppWebhook {
