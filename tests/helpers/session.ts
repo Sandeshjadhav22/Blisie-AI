@@ -26,6 +26,7 @@ export async function createSignedInUser(
     googleId: string;
     telegramId: string;
     whatsappId: string;
+    access: 'waitlist' | 'approved' | 'rejected';
   }> = {},
 ): Promise<{ user: UserDocument; cookie: string }> {
   counter += 1;
@@ -38,6 +39,7 @@ export async function createSignedInUser(
     name: 'Sandesh Jadhav',
     email: `user${counter}@example.com`,
     googleId: `google-${counter}`,
+    access: 'approved',
     channels,
     primaryChannel: channels[0]?.type,
     ...rest,

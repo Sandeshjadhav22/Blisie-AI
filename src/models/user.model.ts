@@ -60,6 +60,15 @@ const userSchema = new Schema(
     googleId: { type: String, unique: true, sparse: true },
     // IANA timezone, e.g. "Asia/Kolkata". Set during onboarding.
     timezone: { type: String, required: true, default: 'UTC' },
+    // Beta access gate: 'waitlist' | 'approved' | 'rejected'
+    access: {
+      type: String,
+      enum: ['waitlist', 'approved', 'rejected'],
+      default: 'waitlist',
+      required: true,
+    },
+    accessDecidedAt: { type: Date },
+    accessDecidedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     channels: { type: [channelSchema], default: [] },
     // Where proactive messages and reminders go when several chat apps are linked.
     primaryChannel: { type: String, enum: CHAT_CHANNELS },

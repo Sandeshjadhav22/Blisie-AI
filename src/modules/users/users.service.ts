@@ -1,3 +1,4 @@
+import { env } from '../../config/env.js';
 import { type PermissionMode, type UserDocument, UserModel } from '../../models/user.model.js';
 import { toPublicChannels } from '../channels/channels.service.js';
 import type { ChatChannel } from '../channels/policy.js';
@@ -6,6 +7,11 @@ import { ValidationError } from '../../utils/errors.js';
 import { mergeChatUserInto } from './merge.js';
 import type { UpdateMeInput } from './users.schemas.js';
 
+export function isUserAdmin(email?: string | null): boolean {
+  if (!email) return false;
+  return env.ADMIN_EMAILS.map((e) => e.toLowerCase()).includes(email.toLowerCase());
+}
+
 export interface PublicUser {
   id: string;
   name: string;
@@ -13,6 +19,8 @@ export interface PublicUser {
   email: string | null;
   avatarUrl: string | null;
   timezone: string;
+  access: 'waitlist' | 'approved' | 'rejected';
+  isAdmin: boolean;
   /** Linked chat apps, and the one messages go to. */
   channels: { type: ChatChannel; username: string | null; linkedAt: string }[];
   primaryChannel: ChatChannel | null;
@@ -34,12 +42,15 @@ export interface PublicUser {
 }
 
 export function toPublicUser(user: UserDocument): PublicUser {
+  const isAdmin = isUserAdmin(user.email);
   return {
     id: user.id,
     name: user.name,
     email: user.email ?? null,
     avatarUrl: user.avatarUrl ?? null,
     timezone: user.timezone,
+    access: user.access,
+    isAdmin,
     ...toPublicChannels(user),
     preferences: {
       dailyBriefingEnabled: user.preferences.dailyBriefingEnabled,
@@ -67,6 +78,7 @@ export async function upsertUserFromGoogle(
   profile: GoogleProfile,
 ): Promise<{ user: UserDocument; isNew: boolean }> {
   const now = new Date();
+  const isAdmin = isUserAdmin(profile.email);
   const existing =
     (await UserModel.findOne({ googleId: profile.sub })) ??
     (await UserModel.findOne({ email: profile.email.toLowerCase() }));
@@ -74,6 +86,9 @@ export async function upsertUserFromGoogle(
   if (existing) {
     existing.googleId = profile.sub;
     existing.lastLoginAt = now;
+    if (isAdmin && existing.access !== 'approved') {
+      existing.access = 'approved';
+    }
     if (profile.picture) existing.avatarUrl = profile.picture;
     await existing.save();
     return { user: existing, isNew: false };
@@ -84,6 +99,7 @@ export async function upsertUserFromGoogle(
     email: profile.email,
     name: profile.name ?? profile.email.split('@')[0],
     avatarUrl: profile.picture,
+    access: isAdmin ? 'approved' : 'waitlist',
     lastLoginAt: now,
   });
   return { user, isNew: true };
@@ -163,4 +179,25 @@ export async function migrateUserEmailIndex(): Promise<void> {
   if (email?.sparse) return;
   if (email) await collection.dropIndex('email_1');
   await collection.createIndex({ email: 1 }, { unique: true, sparse: true, name: 'email_1' });
+}
+
+/**
+ * Ensures any pre-existing users without an access status are approved (so no existing user is locked out),
+ * and ensures all admins listed in ADMIN_EMAILS have access: 'approved'.
+ */
+export async function migrateExistingUsersAccess(): Promise<void> {
+  // Existing users without access field set -> approved
+  await UserModel.updateMany(
+    { access: { $exists: false } },
+    { $set: { access: 'approved' } },
+  );
+
+  // Admin emails -> approved
+  if (env.ADMIN_EMAILS.length > 0) {
+    const adminEmailsLower = env.ADMIN_EMAILS.map((e) => e.toLowerCase());
+    await UserModel.updateMany(
+      { email: { $in: adminEmailsLower } },
+      { $set: { access: 'approved' } },
+    );
+  }
 }

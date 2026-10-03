@@ -21,6 +21,16 @@ const envSchema = z.object({
 
   // Comma-separated list of origins allowed to call the API with credentials.
   CORS_ORIGINS: commaList,
+  // Comma-separated admin email addresses
+  ADMIN_EMAILS: z
+    .string()
+    .default('sandeshjadhav2002@gmail.com')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
   FRONTEND_URL: z.url().default('http://localhost:3000'),
   // Set when frontend and API are on different subdomains (e.g. `.example.com`) so the
   // frontend can see the session cookie. Leave empty for localhost.

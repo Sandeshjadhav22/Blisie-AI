@@ -3498,6 +3498,17 @@
           "timezone": {
             "type": "string"
           },
+          "access": {
+            "type": "string",
+            "enum": [
+              "waitlist",
+              "approved",
+              "rejected"
+            ]
+          },
+          "isAdmin": {
+            "type": "boolean"
+          },
           "channels": {
             "type": "array",
             "items": {
@@ -3625,6 +3636,8 @@
           "email",
           "avatarUrl",
           "timezone",
+          "access",
+          "isAdmin",
           "channels",
           "primaryChannel",
           "preferences",

@@ -37,6 +37,8 @@ export const User = z.object({
   email: z.string().nullable(),
   avatarUrl: z.string().nullable(),
   timezone: z.string(),
+  access: z.enum(['waitlist', 'approved', 'rejected']),
+  isAdmin: z.boolean(),
   channels: z.array(
     z.object({ type: z.enum(CHAT_CHANNELS), username: z.string().nullable(), linkedAt: isoDate }),
   ),

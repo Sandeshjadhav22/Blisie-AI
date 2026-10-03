@@ -25,6 +25,7 @@ import { claimHandoff } from '../handoff/handoff.service.js';
 import { resumeConversation } from '../handoff/resume.js';
 import {
   adoptGoogleIdentity,
+  isUserAdmin,
   revokeAllSessions,
   upsertUserFromGoogle,
 } from '../users/users.service.js';
@@ -155,6 +156,18 @@ async function completeLogin(
     res,
     await signSessionToken({ userId: user.id, sessionVersion: user.sessionVersion }),
   );
+
+  const isAdmin = isUserAdmin(user.email);
+  if (user.access === 'waitlist' && !isAdmin) {
+    logger.info({ userId: user.id }, 'Waitlisted user signed in, redirecting to /waitlist');
+    res.redirect(frontendUrl('/waitlist'));
+    return;
+  }
+  if (user.access === 'rejected' && !isAdmin) {
+    logger.info({ userId: user.id }, 'Rejected user signed in, redirecting to /waitlist');
+    res.redirect(frontendUrl('/waitlist', { status: 'rejected' }));
+    return;
+  }
 
   const destination =
     isNew || !user.onboardingCompletedAt ? '/onboarding' : (oauthState.returnTo ?? '/dashboard');

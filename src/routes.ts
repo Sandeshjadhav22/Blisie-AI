@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
 import { actionsRouter } from './modules/actions/actions.routes.js';
+import { adminRouter } from './modules/admin/admin.routes.js';
 import { authRouter } from './modules/auth/auth.routes.js';
 import { registerBriefingCommands } from './modules/briefing/briefing.commands.js';
 import { briefingRouter } from './modules/briefing/briefing.routes.js';
@@ -25,7 +26,9 @@ import { registerTelegramChannel } from './modules/telegram/telegram.adapter.js'
 import { telegramRouter } from './modules/telegram/telegram.routes.js';
 import { registerWhatsAppChannel } from './modules/whatsapp/whatsapp.adapter.js';
 import { whatsappRouter } from './modules/whatsapp/whatsapp.routes.js';
+import { waitlistRouter } from './modules/waitlist/waitlist.routes.js';
 import { usersRouter } from './modules/users/users.routes.js';
+import { requireApproved } from './middleware/require-auth.js';
 
 /** Versioned API router mounted at /api/v1. Feature modules register their routers here. */
 export const apiRouter = Router();
@@ -41,6 +44,8 @@ apiRouter.get('/openapi.json', (_req, res) => {
   res.json(spec);
 });
 
+apiRouter.use('/waitlist', waitlistRouter);
+apiRouter.use('/admin', adminRouter);
 apiRouter.use('/auth', authRouter);
 apiRouter.use('/users', usersRouter);
 apiRouter.use('/handoff', handoffRouter);
@@ -48,16 +53,16 @@ apiRouter.use('/integrations', integrationsRouter);
 apiRouter.use('/channels', channelsRouter);
 apiRouter.use('/telegram', telegramRouter);
 apiRouter.use('/whatsapp', whatsappRouter);
-apiRouter.use('/conversations', conversationsRouter);
-apiRouter.use('/emails', emailsRouter);
-apiRouter.use('/calendar', calendarRouter);
-apiRouter.use('/tasks', tasksRouter);
-apiRouter.use('/reminders', remindersRouter);
-apiRouter.use('/memories', memoriesRouter);
-apiRouter.use('/commitments', commitmentsRouter);
-apiRouter.use('/follow-ups', followUpsRouter);
-apiRouter.use('/briefing', briefingRouter);
-apiRouter.use('/actions', actionsRouter);
+apiRouter.use('/conversations', requireApproved, conversationsRouter);
+apiRouter.use('/emails', requireApproved, emailsRouter);
+apiRouter.use('/calendar', requireApproved, calendarRouter);
+apiRouter.use('/tasks', requireApproved, tasksRouter);
+apiRouter.use('/reminders', requireApproved, remindersRouter);
+apiRouter.use('/memories', requireApproved, memoriesRouter);
+apiRouter.use('/commitments', requireApproved, commitmentsRouter);
+apiRouter.use('/follow-ups', requireApproved, followUpsRouter);
+apiRouter.use('/briefing', requireApproved, briefingRouter);
+apiRouter.use('/actions', requireApproved, actionsRouter);
 
 // Chat apps. Each is off until its credentials are set.
 registerTelegramChannel();

@@ -65,6 +65,11 @@ async function beginLogin(agent: Agent, returnTo?: string): Promise<string> {
 
 async function signIn(agent: Agent): Promise<void> {
   mockGoogle();
+  const user = await UserModel.findOne({ email: 'sandesh@example.com' });
+  if (user) {
+    user.access = 'approved';
+    await user.save();
+  }
   const state = await beginLogin(agent);
   await agent.get('/api/v1/auth/google/callback').query({ code: 'code', state });
 }
@@ -97,7 +102,7 @@ describe('GET /auth/google', () => {
 });
 
 describe('GET /auth/google/callback (sign-in)', () => {
-  it('creates a new user, sets a session and sends them to onboarding', async () => {
+  it('creates a new user, sets a session and sends non-approved users to waitlist', async () => {
     mockGoogle();
     const agent = request.agent(app);
     const state = await beginLogin(agent);
@@ -105,7 +110,7 @@ describe('GET /auth/google/callback (sign-in)', () => {
     const res = await agent.get('/api/v1/auth/google/callback').query({ code: 'the-code', state });
 
     expect(res.status).toBe(302);
-    expect(res.headers.location).toBe(`${FRONTEND}/onboarding`);
+    expect(res.headers.location).toBe(`${FRONTEND}/waitlist`);
     expect(sessionCookie(res)).toMatch(/HttpOnly/);
     expect(vi.mocked(exchangeCodeForTokens)).toHaveBeenCalledWith('the-code', expect.any(String));
 
@@ -114,6 +119,7 @@ describe('GET /auth/google/callback (sign-in)', () => {
     expect(me.body.user).toMatchObject({
       name: 'Sandesh',
       email: 'sandesh@example.com',
+      access: 'waitlist',
       timezone: 'UTC',
       channels: [],
       primaryChannel: null,
@@ -126,6 +132,7 @@ describe('GET /auth/google/callback (sign-in)', () => {
       googleId: profile.sub,
       email: profile.email,
       name: 'Sandesh',
+      access: 'approved',
       onboardingCompletedAt: new Date(),
     });
     mockGoogle();
@@ -140,6 +147,7 @@ describe('GET /auth/google/callback (sign-in)', () => {
     await UserModel.create({
       ...profile,
       googleId: profile.sub,
+      access: 'approved',
       onboardingCompletedAt: new Date(),
     });
     mockGoogle();
@@ -151,7 +159,7 @@ describe('GET /auth/google/callback (sign-in)', () => {
   });
 
   it('links Google to an existing account with the same email', async () => {
-    await UserModel.create({ email: 'Sandesh@Example.com', name: 'Existing' });
+    await UserModel.create({ email: 'Sandesh@Example.com', name: 'Existing', access: 'approved' });
     await signIn(request.agent(app));
 
     const users = await UserModel.find();
